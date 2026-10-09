@@ -38,4 +38,5 @@ Aggiorna questa tabella a ogni fine fase.
 ## Note per le sessioni future
 - Fase 1: account Higgsfield su piano free (1.52 crediti all'avvio). GPT Image 2.5 richiede il piano Basic; l'unico modello che rientra nel saldo è Z Image (0.15 crediti/immagine, 16:9, 2048×1152), con rate limit di circa un job alla volta.
 - Z Image è fallito 5 volte di fila (coda bloccata). L'utente genera le immagini da solo con i prompt di `docs/PROMPTS.md` e le carica in `/reference`.
+- Generate anche via MCP: 5 su Figma (gemini-3.1-flash-image, piano Starter, 1376×768, link validi 7 giorni) e 4 su Canva (quota AI esaurita al quinto prompt). Anche `www.figma.com` è bloccato dalla network policy, quindi i file vanno caricati in `/reference` a mano.
 - Il CDN delle immagini Higgsfield (`d8j0ntlcm91z4.cloudfront.net`) è bloccato dalla network policy dell'ambiente: per salvare i PNG in `/reference` va aggiunto agli Allowed domains.

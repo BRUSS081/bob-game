@@ -20,6 +20,7 @@ La fonte di verità è **[docs/BRIEF.md](docs/BRIEF.md)**: leggilo per intero al
 - Nella UI: "BOB / BOBBA", mai "maschio / femmina". EN di default, IT e PT; tutte le stringhe in un unico file.
 - localStorage sempre dentro try/catch: il gioco funziona anche se il salvataggio fallisce.
 - Niente grafica, nomi o suoni di Google (si prende il genere del dino, non gli asset).
+- Scena: niente terraferma, solo mare aperto, cielo e ostacoli. Hydrofoil: albero e ala sempre **sotto** la tavola, in acqua.
 
 ## Stato
 | Fase | Stato |

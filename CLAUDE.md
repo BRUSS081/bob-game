@@ -35,4 +35,5 @@ La fonte di verità è **[docs/BRIEF.md](docs/BRIEF.md)**: leggilo per intero al
 Aggiorna questa tabella a ogni fine fase.
 
 ## Note per le sessioni future
-- Fase 1: modello usato GPT Image 2.5 (variant flare, quality low, 1k, 16:9). Saldo Higgsfield all'avvio: 1.52 crediti (piano free); 10 immagini = 1.25 crediti.
+- Fase 1: account Higgsfield su piano free (1.52 crediti all'avvio). GPT Image 2.5 richiede il piano Basic; l'unico modello che rientra nel saldo è Z Image (0.15 crediti/immagine, 16:9, 2048×1152), con rate limit di circa un job alla volta.
+- Il CDN delle immagini Higgsfield (`d8j0ntlcm91z4.cloudfront.net`) è bloccato dalla network policy dell'ambiente: per salvare i PNG in `/reference` va aggiunto agli Allowed domains.

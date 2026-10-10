@@ -66,7 +66,7 @@ Minigioco web endless runner a un solo tasto, nello spirito del dinosauro di Chr
 
 ### Resa grafica
 - Pixel perfect: risoluzione interna bassa (altezza ~270 px, larghezza in base all'aspect ratio), scaling nearest-neighbor, imageSmoothingEnabled = false, gestione corretta del devicePixelRatio. Mai pixel sfocati o di dimensioni diverse.
-- Mobile verticale: la scena occupa una fascia a tutta larghezza, come nel dino. Orizzontale: schermo pieno.
+- Su telefono il gioco prende tutto lo schermo, sia in verticale sia in orizzontale (aggiornamento dell'utente: in origine il verticale era una fascia come nel dino). In verticale la larghezza di gioco resta la stessa e l'altezza in più si divide tra cielo e mare.
 - Una palette unica (~32 colori + rampe per le parti personalizzabili). Niente gradienti lisci: bande a gradini o dithering ordinato.
 
 ### Sprite: li disegni tu in codice

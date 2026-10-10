@@ -21,6 +21,7 @@ La fonte di verità è **[docs/BRIEF.md](docs/BRIEF.md)**: leggilo per intero al
 - localStorage sempre dentro try/catch: il gioco funziona anche se il salvataggio fallisce.
 - Niente grafica, nomi o suoni di Google (si prende il genere del dino, non gli asset).
 - Scena: niente terraferma, solo mare aperto, cielo e ostacoli. Hydrofoil: albero e ala sempre **sotto** la tavola, in acqua.
+- Su telefono il gioco prende tutto lo schermo anche in verticale (niente fascia).
 
 ## Stato
 | Fase | Stato |

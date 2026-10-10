@@ -1,0 +1,22 @@
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  /* edges left by the integer scale blend with sky (top) and sea (bottom) */
+  background: linear-gradient(#2f7fd6 0 50%, #2cc0c4 50% 100%);
+  touch-action: none;
+  overscroll-behavior: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#game {
+  position: absolute;
+  display: block;
+  image-rendering: crisp-edges;
+  image-rendering: pixelated;
+  outline: none;
+}

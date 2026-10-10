@@ -25,7 +25,7 @@ La fonte di verità è **[docs/BRIEF.md](docs/BRIEF.md)**: leggilo per intero al
 ## Stato
 | Fase | Stato |
 |---|---|
-| 1 — Concept art (Higgsfield) | in corso: immagini generate, in attesa della scelta dell'utente |
+| 1 — Concept art | fatta: pixel art di riferimento disegnate in codice (`npm run reference` → `/reference`) |
 | 2 — Setup e loop di gioco | da fare |
 | 3 — Ambiente | da fare |
 | 4 — Sprite e personalizzazione | da fare |
@@ -38,5 +38,6 @@ Aggiorna questa tabella a ogni fine fase.
 ## Note per le sessioni future
 - Fase 1: account Higgsfield su piano free (1.52 crediti all'avvio). GPT Image 2.5 richiede il piano Basic; l'unico modello che rientra nel saldo è Z Image (0.15 crediti/immagine, 16:9, 2048×1152), con rate limit di circa un job alla volta.
 - Z Image è fallito 5 volte di fila (coda bloccata). L'utente genera le immagini da solo con i prompt di `docs/PROMPTS.md` e le carica in `/reference`.
+- Alla fine l'utente ha chiesto di disegnare io le pixel art di riferimento ispirandomi alle immagini AI (non scaricabili per la network policy): `scripts/render-reference.ts`, palette master in `src/render/palette.ts`.
 - Generate anche via MCP: 5 su Figma (gemini-3.1-flash-image, piano Starter, 1376×768, link validi 7 giorni) e 5 su Canva (il quinto, ostacoli, è riuscito al secondo tentativo). Anche `www.figma.com` è bloccato dalla network policy, quindi i file vanno caricati in `/reference` a mano.
 - Il CDN delle immagini Higgsfield (`d8j0ntlcm91z4.cloudfront.net`) è bloccato dalla network policy dell'ambiente: per salvare i PNG in `/reference` va aggiunto agli Allowed domains.

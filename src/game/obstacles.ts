@@ -1,28 +1,87 @@
-import { C } from '../render/palette.ts';
 import type { Rng } from '../core/rng.ts';
-import type { SurfConfig } from './config.ts';
+import { C } from '../render/palette.ts';
+import { AIR, HIGH, SURFACE, UNDER } from './athletes.ts';
+import type { RunConfig } from './config.ts';
+import type { SportId } from './sport.ts';
+
+export type ObstacleName =
+  | 'jellyfish'
+  | 'seaweed'
+  | 'rock'
+  | 'buoy'
+  | 'rival'
+  | 'gull'
+  | 'boat'
+  | 'kiter'
+  | 'smallbuoy'
+  | 'lowrock'
+  | 'plank'
+  | 'deepjelly'
+  | 'kelp';
 
 export interface ObstacleKind {
-  readonly name: 'jellyfish' | 'seaweed' | 'rock' | 'buoy' | 'rival';
+  readonly name: ObstacleName;
   readonly w: number;
   readonly h: number;
-  /** Placeholder color until the sprites exist. */
+  /** Which hitboxes it can hit (see athletes.ts). */
+  readonly layer: number;
+  /** Altitude range of its bottom edge; negative is underwater. */
+  readonly minY: number;
+  readonly maxY: number;
+  /** Extra speed toward the player (gulls fly). */
+  readonly vx: number;
+  /** Placeholder color for debugging and fallbacks. */
   readonly color: number;
-  /** Appears only from this speed on. */
+  /** Appears only from this run speed on. */
   readonly minSpeed: number;
   readonly weight: number;
+  /** Small surf obstacles may come in pairs at high speed. */
+  readonly pairable: boolean;
 }
 
-/** Surf obstacles, all sitting on the surface. */
+function kind(k: Partial<ObstacleKind> & Pick<ObstacleKind, 'name' | 'w' | 'h' | 'color'>): ObstacleKind {
+  return { layer: SURFACE, minY: 0, maxY: 0, vx: 0, minSpeed: 0, weight: 1, pairable: false, ...k };
+}
+
+/** Surf: everything sits on the surface. */
 export const SURF_OBSTACLES: readonly ObstacleKind[] = [
-  { name: 'jellyfish', w: 12, h: 8, color: C.rose, minSpeed: 0, weight: 2 },
-  { name: 'seaweed', w: 22, h: 8, color: C.green, minSpeed: 0, weight: 2 },
-  { name: 'rock', w: 26, h: 16, color: C.grey, minSpeed: 0, weight: 3 },
-  { name: 'buoy', w: 10, h: 26, color: C.red, minSpeed: 215, weight: 2 },
-  { name: 'rival', w: 18, h: 34, color: C.navy, minSpeed: 250, weight: 1 },
+  kind({ name: 'jellyfish', w: 12, h: 8, color: C.rose, weight: 2, pairable: true }),
+  kind({ name: 'seaweed', w: 22, h: 8, color: C.green, weight: 2, pairable: true }),
+  kind({ name: 'rock', w: 26, h: 16, color: C.grey, weight: 3 }),
+  kind({ name: 'buoy', w: 10, h: 26, color: C.red, minSpeed: 215, weight: 2 }),
+  kind({ name: 'rival', w: 18, h: 34, color: C.navy, minSpeed: 250, weight: 1 }),
 ];
 
-/** Small obstacles can come in pairs at higher speed. */
+/**
+ * Kitesurf: surface obstacles to jump, low gulls that hit a jumping rider,
+ * high gulls that hit the kite unless a jump lifts it above them.
+ */
+export const KITE_OBSTACLES: readonly ObstacleKind[] = [
+  kind({ name: 'rock', w: 26, h: 16, color: C.grey, weight: 3 }),
+  kind({ name: 'buoy', w: 10, h: 26, color: C.red, minSpeed: 220, weight: 2 }),
+  kind({ name: 'boat', w: 44, h: 22, color: C.white, minSpeed: 250, weight: 1 }),
+  kind({ name: 'kiter', w: 18, h: 34, color: C.navy, minSpeed: 270, weight: 1 }),
+  kind({ name: 'gull', w: 14, h: 8, color: C.white, layer: AIR, minY: 40, maxY: 48, vx: 45, minSpeed: 230, weight: 2 }),
+  kind({ name: 'gull', w: 14, h: 8, color: C.white, layer: HIGH, minY: 80, maxY: 92, vx: 45, weight: 2 }),
+];
+
+/**
+ * Wing foil: surface obstacles to fly over, underwater ones that catch a
+ * foil flying too low, gulls that hit a rider flying too high.
+ */
+export const WING_OBSTACLES: readonly ObstacleKind[] = [
+  kind({ name: 'plank', w: 30, h: 5, color: C.brown, weight: 2 }),
+  kind({ name: 'lowrock', w: 24, h: 9, color: C.grey, weight: 2 }),
+  kind({ name: 'smallbuoy', w: 8, h: 12, color: C.red, minSpeed: 200, weight: 2 }),
+  kind({ name: 'kelp', w: 14, h: 20, color: C.forest, layer: UNDER, minY: -32, maxY: -32, weight: 2 }),
+  kind({ name: 'deepjelly', w: 12, h: 8, color: C.mauve, layer: UNDER, minY: -16, maxY: -16, minSpeed: 210, weight: 2 }),
+  kind({ name: 'gull', w: 14, h: 8, color: C.white, layer: AIR, minY: 48, maxY: 54, vx: 40, minSpeed: 220, weight: 2 }),
+];
+
+export function obstaclesFor(sport: SportId): readonly ObstacleKind[] {
+  return sport === 'surf' ? SURF_OBSTACLES : sport === 'kite' ? KITE_OBSTACLES : WING_OBSTACLES;
+}
+
 const PAIR_SPEED = 280;
 const PAIR_CHANCE = 0.25;
 const PAIR_SPACING = 4;
@@ -32,6 +91,8 @@ export interface Obstacle {
   kind: ObstacleKind;
   x: number;
   prevX: number;
+  /** Altitude of the bottom edge. */
+  y: number;
 }
 
 /** What the last spawn produced, so the game can place a power-up in the gap. */
@@ -44,82 +105,108 @@ export interface SpawnInfo {
 }
 
 /**
- * Fixed-size pool of obstacles. Spawning is driven by distance travelled, so
- * spacing does not depend on the screen width.
+ * Fixed-size pool of obstacles. Spawning is driven by distance travelled,
+ * so spacing does not depend on the screen width. Flying obstacles close
+ * in faster, so the gap before them is stretched by the distance they
+ * gain before reaching the player.
  */
 export class Obstacles {
   readonly items: Obstacle[];
   readonly lastSpawn: SpawnInfo = { spawned: false, groupEnd: 0, gap: 0 };
+  private readonly table: readonly ObstacleKind[];
   private untilNext = 0;
+  private next: ObstacleKind;
 
-  constructor(capacity = 16) {
+  constructor(table: readonly ObstacleKind[] = SURF_OBSTACLES, capacity = 16) {
+    this.table = table;
+    this.next = table[0];
     this.items = [];
-    for (let i = 0; i < capacity; i++) this.items.push({ active: false, kind: SURF_OBSTACLES[0], x: 0, prevX: 0 });
+    for (let i = 0; i < capacity; i++) this.items.push({ active: false, kind: table[0], x: 0, prevX: 0, y: 0 });
   }
 
-  reset(firstGap: number): void {
+  reset(firstGap: number, rng?: Rng, speed = 0): void {
     for (let i = 0; i < this.items.length; i++) this.items[i].active = false;
     this.untilNext = firstGap;
     this.lastSpawn.spawned = false;
+    this.next = rng ? this.pickKind(speed, rng) : this.table[0];
   }
 
-  /** Moves obstacles left by `speed·dt`, recycles those off screen and spawns new ones at spawnX. */
-  update(dt: number, speed: number, spawnX: number, rng: Rng, cfg: SurfConfig): SpawnInfo {
-    const dx = speed * dt;
+  /** Moves obstacles, recycles those off screen and spawns new ones at spawnX. */
+  update(dt: number, speed: number, spawnX: number, playerX: number, rng: Rng, cfg: RunConfig): SpawnInfo {
     const items = this.items;
     for (let i = 0; i < items.length; i++) {
       const o = items[i];
       if (!o.active) continue;
       o.prevX = o.x;
-      o.x -= dx;
+      o.x -= (speed + o.kind.vx) * dt;
       if (o.x + o.kind.w < -16) o.active = false;
     }
     this.lastSpawn.spawned = false;
-    this.untilNext -= dx;
+    this.untilNext -= speed * dt;
     if (this.untilNext > 0) return this.lastSpawn;
 
-    const kind = pickKind(speed, rng);
-    let width = kind.w;
-    if (!this.add(kind, spawnX)) return this.lastSpawn;
-    if (kind.h <= 8 && speed >= PAIR_SPEED && rng.next() < PAIR_CHANCE) {
-      const second = SURF_OBSTACLES[rng.next() < 0.5 ? 0 : 1];
-      if (this.add(second, spawnX + width + PAIR_SPACING)) width += PAIR_SPACING + second.w;
+    const k = this.next;
+    let width = k.w;
+    if (!this.add(k, spawnX, this.altitude(k, rng))) return this.lastSpawn;
+    if (k.pairable && speed >= PAIR_SPEED && rng.next() < PAIR_CHANCE) {
+      const second = this.pairPartner(rng);
+      if (second && this.add(second, spawnX + width + PAIR_SPACING, 0)) width += PAIR_SPACING + second.w;
     }
 
-    const difficulty = (speed - cfg.startSpeed) / (cfg.maxSpeed - cfg.startSpeed);
-    const maxGapTime = cfg.maxGapTimeStart + (cfg.maxGapTimeEnd - cfg.maxGapTimeStart) * clamp01(difficulty);
+    const difficulty = clamp01((speed - cfg.startSpeed) / (cfg.maxSpeed - cfg.startSpeed));
+    const maxGapTime = cfg.maxGapTimeStart + (cfg.maxGapTimeEnd - cfg.maxGapTimeStart) * difficulty;
     const gap = speed * rng.range(cfg.minGapTime, maxGapTime);
-    this.untilNext = width + gap;
+    this.next = this.pickKind(speed, rng);
+    // a flyer gains (vx / speed) of the way to the player; leave it that much more room
+    const closing = this.next.vx > 0 ? (this.next.vx / speed) * Math.max(0, spawnX - playerX) : 0;
+    this.untilNext = width + gap + closing;
     this.lastSpawn.spawned = true;
     this.lastSpawn.groupEnd = spawnX + width;
     this.lastSpawn.gap = gap;
     return this.lastSpawn;
   }
 
-  private add(kind: ObstacleKind, x: number): boolean {
+  private altitude(k: ObstacleKind, rng: Rng): number {
+    return k.minY === k.maxY ? k.minY : Math.round(k.minY + rng.next() * (k.maxY - k.minY));
+  }
+
+  private pairPartner(rng: Rng): ObstacleKind | null {
+    let count = 0;
+    for (let i = 0; i < this.table.length; i++) if (this.table[i].pairable) count++;
+    if (count === 0) return null;
+    let pick = Math.floor(rng.next() * count);
+    for (let i = 0; i < this.table.length; i++) {
+      if (!this.table[i].pairable) continue;
+      if (pick-- === 0) return this.table[i];
+    }
+    return null;
+  }
+
+  private add(k: ObstacleKind, x: number, y: number): boolean {
     for (let i = 0; i < this.items.length; i++) {
       const o = this.items[i];
       if (o.active) continue;
       o.active = true;
-      o.kind = kind;
+      o.kind = k;
       o.x = o.prevX = x;
+      o.y = y;
       return true;
     }
     return false;
   }
-}
 
-function pickKind(speed: number, rng: Rng): ObstacleKind {
-  let total = 0;
-  for (let i = 0; i < SURF_OBSTACLES.length; i++) if (speed >= SURF_OBSTACLES[i].minSpeed) total += SURF_OBSTACLES[i].weight;
-  let r = rng.next() * total;
-  for (let i = 0; i < SURF_OBSTACLES.length; i++) {
-    const k = SURF_OBSTACLES[i];
-    if (speed < k.minSpeed) continue;
-    r -= k.weight;
-    if (r < 0) return k;
+  private pickKind(speed: number, rng: Rng): ObstacleKind {
+    const t = this.table;
+    let total = 0;
+    for (let i = 0; i < t.length; i++) if (speed >= t[i].minSpeed) total += t[i].weight;
+    let r = rng.next() * total;
+    for (let i = 0; i < t.length; i++) {
+      if (speed < t[i].minSpeed) continue;
+      r -= t[i].weight;
+      if (r < 0) return t[i];
+    }
+    return t[0];
   }
-  return SURF_OBSTACLES[0];
 }
 
 function clamp01(v: number): number {

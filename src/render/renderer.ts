@@ -1,29 +1,103 @@
 import type { Display } from '../core/display.ts';
-import { SURF, surfaceY } from '../game/config.ts';
-import type { Game } from '../game/game.ts';
-import type { Obstacle } from '../game/obstacles.ts';
-import { nextMultiplier } from '../game/score.ts';
-import { t } from '../i18n/strings.ts';
+import type { AthleteState } from '../game/athletes.ts';
+import { KITE } from '../game/config.ts';
+import type { Obstacle, ObstacleName } from '../game/obstacles.ts';
+import type { SportId } from '../game/sport.ts';
+import { ANCHOR_X, ANCHOR_Y, FRAME_H, FRAME_W, type FrameName } from '../sprites/compose.ts';
+import { powerRaster, propRasters } from '../sprites/props.ts';
+import type { Ramp } from '../sprites/ramps.ts';
+import type { Raster } from '../sprites/raster.ts';
+import { SPIN_STEPS, type AthleteSprites } from '../sprites/sheet.ts';
 import { ADVANCE, BitmapFont, GLYPH_H, digitCount, splitPoint } from './font.ts';
-import { C, PALETTE_CSS } from './palette.ts';
+import { t } from '../i18n/strings.ts';
+import { C, PALETTE, PALETTE_CSS } from './palette.ts';
 
 /** Height of the background sea between the horizon and the surface line. */
-const HORIZON_ABOVE_SEA = 34;
-const TAU = Math.PI * 2;
+export const HORIZON_ABOVE_SEA = 34;
+const RIDE: readonly FrameName[] = ['ride0', 'ride1', 'ride2', 'ride3'];
 
-function lerp(a: number, b: number, k: number): number {
+export function lerp(a: number, b: number, k: number): number {
   return a + (b - a) * k;
 }
 
+export interface Rect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export function newRect(): Rect {
+  return { x: 0, y: 0, w: 0, h: 0 };
+}
+
+export function setRect(r: Rect, x: number, y: number, w: number, h: number): Rect {
+  r.x = Math.round(x);
+  r.y = Math.round(y);
+  r.w = Math.round(w);
+  r.h = Math.round(h);
+  return r;
+}
+
+export function inside(r: Rect, x: number, y: number): boolean {
+  return x >= r.x && y >= r.y && x < r.x + r.w && y < r.y + r.h;
+}
+
+/** What the renderer needs to know about an athlete to pick its frame. */
+export interface PoseView {
+  readonly state: AthleteState;
+  readonly y: number;
+  readonly prevY: number;
+  readonly rotation: number;
+  readonly prevRotation: number;
+  readonly stateTime: number;
+  readonly touching?: boolean;
+}
+
+export type ButtonStyle = 'primary' | 'normal' | 'selected' | 'ghost';
+
+function rasterCanvas(r: Raster): HTMLCanvasElement {
+  const canvas = document.createElement('canvas');
+  canvas.width = r.w;
+  canvas.height = r.h;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    const img = ctx.createImageData(r.w, r.h);
+    for (let i = 0; i < r.px.length; i++) {
+      const v = r.px[i];
+      if (!v) continue;
+      const rgb = PALETTE[v];
+      img.data[i * 4] = (rgb >> 16) & 0xff;
+      img.data[i * 4 + 1] = (rgb >> 8) & 0xff;
+      img.data[i * 4 + 2] = rgb & 0xff;
+      img.data[i * 4 + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+  return canvas;
+}
+
+function rampCss(r: Ramp): [string, string, string] {
+  return r.map((rgb) => '#' + rgb.toString(16).padStart(6, '0')) as [string, string, string];
+}
+
 /**
- * Phase 2 renderer: flat placeholder shapes in the master palette. Draws
- * into the low-resolution buffer with integer coordinates only.
+ * Draws the world, the athletes and the UI into the low-resolution buffer,
+ * always on whole pixels.
  */
 export class Renderer {
+  readonly font = new BitmapFont();
+  readonly touch: boolean;
+  ctx: CanvasRenderingContext2D;
+  W = 0;
+  H = 0;
+  seaY = 0;
+  /** UI scale: text and buttons double on phones so they stay readable. */
+  u = 1;
   private readonly display: Display;
-  private readonly font = new BitmapFont();
-  private readonly touch: boolean;
-  private ctx: CanvasRenderingContext2D;
+  private readonly props = new Map<ObstacleName, HTMLCanvasElement[]>();
+  private readonly powers: Record<'wave' | 'gust', HTMLCanvasElement | null> = { wave: null, gust: null };
+  private readonly swatches = new Map<Ramp, [string, string, string]>();
 
   constructor(display: Display) {
     this.display = display;
@@ -31,72 +105,65 @@ export class Renderer {
     this.touch = window.matchMedia('(pointer: coarse)').matches;
   }
 
-  render(g: Game, alpha: number): void {
+  /** Starts a frame with the current layout. */
+  begin(surface: (height: number) => number): void {
     this.ctx = this.display.ctx;
-    const { width: W, height: H } = this.display.layout;
-    const seaY = surfaceY(H);
-    const distance = lerp(g.prevDistance, g.distance, alpha);
+    const l = this.display.layout;
+    this.W = l.width;
+    this.H = l.height;
+    this.seaY = surface(l.height);
+    this.u = l.cssWidth / l.width < 2 ? 2 : 1;
+  }
 
-    this.backdrop(W, H, seaY, distance);
-    if (g.perfectWave > 0) this.perfectWave(g, seaY);
-    const items = g.obstacles.items;
-    for (let i = 0; i < items.length; i++) if (items[i].active) this.obstacle(items[i], alpha, seaY);
-    if (g.power.active) this.powerUp(g, alpha, seaY);
-    this.surfer(g, alpha, seaY);
-    this.surfaceFront(W, seaY, distance);
-    this.hud(g, W, seaY);
+  present(): void {
     this.display.present();
   }
 
   // ------------------------------------------------------------ primitives
 
-  private fill(c: number, x: number, y: number, w: number, h: number): void {
+  fill(c: number, x: number, y: number, w: number, h: number): void {
     this.ctx.fillStyle = PALETTE_CSS[c];
     this.ctx.fillRect(x, y, w, h);
   }
 
-  /** Repeating horizontal dashes scrolled by `offset`. */
-  private dashes(W: number, y: number, spacing: number, len: number, offset: number, c: number): void {
+  private dashes(y: number, spacing: number, len: number, offset: number, c: number): void {
     const start = -Math.floor(((offset % spacing) + spacing) % spacing);
     this.ctx.fillStyle = PALETTE_CSS[c];
-    for (let x = start; x < W; x += spacing) this.ctx.fillRect(x, y, len, 1);
+    for (let x = start; x < this.W; x += spacing) this.ctx.fillRect(x, y, len, 1);
   }
 
-  /**
-   * Rectangle rotated about (ox, oy). (rx, ry) is the rectangle center
-   * relative to that pivot before rotation. Rasterized in hard-edged spans.
-   */
-  private rotRect(ox: number, oy: number, rx: number, ry: number, w: number, h: number, cos: number, sin: number, c: number): void {
-    const cx = ox + rx * cos - ry * sin;
-    const cy = oy + rx * sin + ry * cos;
-    const r = Math.ceil(Math.sqrt(w * w + h * h) / 2) + 1;
-    const hw = w / 2;
-    const hh = h / 2;
-    const x0 = Math.floor(cx - r);
-    const x1 = Math.ceil(cx + r);
+  /** One-pixel line (Bresenham), no allocations. */
+  line(x0: number, y0: number, x1: number, y1: number, c: number): void {
+    x0 = Math.round(x0);
+    y0 = Math.round(y0);
+    x1 = Math.round(x1);
+    y1 = Math.round(y1);
     this.ctx.fillStyle = PALETTE_CSS[c];
-    for (let y = Math.floor(cy - r); y <= Math.ceil(cy + r); y++) {
-      let run = -1;
-      for (let x = x0; x <= x1 + 1; x++) {
-        const dx = x + 0.5 - cx;
-        const dy = y + 0.5 - cy;
-        const lx = dx * cos + dy * sin;
-        const ly = -dx * sin + dy * cos;
-        const inside = x <= x1 && lx >= -hw && lx < hw && ly >= -hh && ly < hh;
-        if (inside && run < 0) run = x;
-        else if (!inside && run >= 0) {
-          this.ctx.fillRect(run, y, x - run, 1);
-          run = -1;
-        }
+    const dx = Math.abs(x1 - x0);
+    const dy = -Math.abs(y1 - y0);
+    const sx = x0 < x1 ? 1 : -1;
+    const sy = y0 < y1 ? 1 : -1;
+    let err = dx + dy;
+    for (let i = 0; i < 2000; i++) {
+      this.ctx.fillRect(x0, y0, 1, 1);
+      if (x0 === x1 && y0 === y1) return;
+      const e2 = 2 * err;
+      if (e2 >= dy) {
+        err += dy;
+        x0 += sx;
+      }
+      if (e2 <= dx) {
+        err += dx;
+        y0 += sy;
       }
     }
   }
 
   // ------------------------------------------------------------ world
 
-  private backdrop(W: number, H: number, seaY: number, distance: number): void {
+  backdrop(distance: number): void {
+    const { W, H, seaY } = this;
     const horizon = seaY - HORIZON_ABOVE_SEA;
-    // sky in stepped bands
     const b1 = Math.round(horizon * 0.28);
     const b2 = Math.round(horizon * 0.55);
     const b3 = Math.round(horizon * 0.8);
@@ -104,42 +171,52 @@ export class Renderer {
     this.fill(C.sky, 0, b1, W, b2 - b1);
     this.fill(C.skyLight, 0, b2, W, b3 - b2);
     this.fill(C.skyPale, 0, b3, W, horizon - b3);
-    // background sea, slow parallax
     this.fill(C.deep, 0, horizon, W, 4);
     this.fill(C.teal, 0, horizon + 4, W, seaY - horizon - 4);
-    this.dashes(W, horizon + 2, 41, 4, distance * 0.1, C.teal);
-    this.dashes(W, horizon + 9, 53, 6, distance * 0.2 + 17, C.sea);
-    this.dashes(W, horizon + 17, 37, 5, distance * 0.3 + 5, C.sea);
-    this.dashes(W, horizon + 26, 47, 8, distance * 0.45 + 29, C.turquoise);
-    // foreground water; tall portrait views get deeper stepped bands
+    this.dashes(horizon + 2, 41, 4, distance * 0.1, C.teal);
+    this.dashes(horizon + 9, 53, 6, distance * 0.2 + 17, C.sea);
+    this.dashes(horizon + 17, 37, 5, distance * 0.3 + 5, C.sea);
+    this.dashes(horizon + 26, 47, 8, distance * 0.45 + 29, C.turquoise);
     this.fill(C.sea, 0, seaY, W, H - seaY);
     this.fill(C.turquoise, 0, seaY, W, 4);
-    this.dashes(W, seaY + 14, 61, 10, distance + 11, C.turquoise);
-    this.dashes(W, seaY + 27, 43, 6, distance * 1.2 + 3, C.turquoise);
-    this.dashes(W, seaY + 41, 71, 12, distance * 1.4 + 37, C.aqua);
+    this.dashes(seaY + 14, 61, 10, distance + 11, C.turquoise);
+    this.dashes(seaY + 27, 43, 6, distance * 1.2 + 3, C.turquoise);
+    this.dashes(seaY + 41, 71, 12, distance * 1.4 + 37, C.aqua);
     const depth = H - seaY;
     if (depth > 90) {
       this.fill(C.teal, 0, seaY + 80, W, depth - 80);
-      this.dashes(W, seaY + 80, 29, 14, distance * 1.4 + 7, C.sea);
-      this.dashes(W, seaY + 112, 53, 9, distance * 1.6 + 21, C.sea);
+      this.dashes(seaY + 80, 29, 14, distance * 1.4 + 7, C.sea);
+      this.dashes(seaY + 112, 53, 9, distance * 1.6 + 21, C.sea);
     }
     if (depth > 180) {
       this.fill(C.deep, 0, seaY + 170, W, depth - 170);
-      this.dashes(W, seaY + 170, 37, 18, distance * 1.6 + 13, C.teal);
-      this.dashes(W, seaY + 214, 67, 10, distance * 1.8 + 41, C.teal);
+      this.dashes(seaY + 170, 37, 18, distance * 1.6 + 13, C.teal);
+      this.dashes(seaY + 214, 67, 10, distance * 1.8 + 41, C.teal);
     }
   }
 
-  /** Crest line drawn over the athlete's feet and the obstacles' bases. */
-  private surfaceFront(W: number, seaY: number, distance: number): void {
-    this.fill(C.aqua, 0, seaY, W, 1);
-    this.dashes(W, seaY, 23, 5, distance, C.white);
-    this.dashes(W, seaY + 1, 31, 3, distance + 9, C.foamShadow);
+  /** Crest line drawn over the athletes' boards and the obstacles' bases. */
+  surfaceFront(distance: number): void {
+    this.fill(C.aqua, 0, this.seaY, this.W, 1);
+    this.dashes(this.seaY, 23, 5, distance, C.white);
+    this.dashes(this.seaY + 1, 31, 3, distance + 9, C.foamShadow);
   }
 
-  private perfectWave(g: Game, seaY: number): void {
-    if (g.perfectWave < 1.5 && Math.floor(g.clock * 8) % 2 === 0) return;
-    const right = SURF.playerX + 30;
+  /** Fast white streaks for the wind gust. */
+  windLines(clock: number): void {
+    const { W, seaY } = this;
+    for (let i = 0; i < 9; i++) {
+      const y = Math.round(((i * 37) % (seaY - 20)) + 10);
+      const x = Math.round(W - ((clock * 700 + i * 131) % (W + 60)));
+      this.fill(C.white, x, y, 18 + (i % 3) * 8, 1);
+    }
+  }
+
+  /** The tube of the perfect wave, behind the rider. */
+  perfectWave(playerX: number, blinking: boolean): void {
+    if (blinking) return;
+    const { seaY } = this;
+    const right = playerX + 30;
     this.fill(C.turquoise, 0, seaY - 64, right, 64);
     this.fill(C.aqua, 0, seaY - 64, right, 6);
     this.fill(C.white, 0, seaY - 67, right + 6, 3);
@@ -147,199 +224,205 @@ export class Renderer {
     this.fill(C.sea, 0, seaY - 40, right - 12, 40);
   }
 
-  private obstacle(o: Obstacle, alpha: number, seaY: number): void {
-    const x = Math.round(lerp(o.prevX, o.x, alpha));
-    const { w, h } = o.kind;
-    const top = seaY - h;
-    switch (o.kind.name) {
-      case 'rock':
-        this.fill(C.grey, x, top, w, h);
-        this.fill(C.silver, x + 2, top, w - 10, 2);
-        this.fill(C.slate, x + w - 8, top + 2, 8, h - 2);
-        break;
-      case 'buoy':
-        this.fill(C.red, x, top + 4, w, h - 4);
-        this.fill(C.white, x, top + 12, w, 4);
-        this.fill(C.wine, x + w - 3, top + 4, 3, h - 4);
-        this.fill(C.ink, x + 4, top, 2, 4);
-        this.fill(C.gold, x + 4, top, 2, 2);
-        break;
-      case 'rival':
-        this.fill(C.white, x - 4, seaY - 3, w + 8, 3);
-        this.fill(C.navy, x + 3, top + 9, 12, h - 12);
-        this.fill(C.tan, x + 5, top, 8, 8);
-        this.fill(C.ink, x + 5, top, 8, 3);
-        break;
-      case 'seaweed':
-        this.fill(C.green, x, top, w, h);
-        this.fill(C.forest, x + 3, top + 2, 2, h - 2);
-        this.fill(C.forest, x + 11, top + 3, 2, h - 3);
-        this.fill(C.forest, x + 17, top + 1, 2, h - 1);
-        break;
-      case 'jellyfish':
-        this.fill(C.rose, x + 1, top, w - 2, 5);
-        this.fill(C.rose, x, top + 2, w, 3);
-        this.fill(C.mauve, x + 2, top + 5, 2, 3);
-        this.fill(C.mauve, x + 6, top + 5, 2, 3);
-        this.fill(C.white, x + 3, top + 1, 2, 1);
-        break;
+  private propCanvases(name: ObstacleName): HTMLCanvasElement[] {
+    let list = this.props.get(name);
+    if (!list) {
+      list = propRasters(name).map(rasterCanvas);
+      this.props.set(name, list);
+    }
+    return list;
+  }
+
+  obstacles(items: readonly Obstacle[], alpha: number, clock: number, rivals: readonly AthleteSprites[]): void {
+    const { seaY } = this;
+    for (let i = 0; i < items.length; i++) {
+      const o = items[i];
+      if (!o.active) continue;
+      const k = o.kind;
+      const x = Math.round(lerp(o.prevX, o.x, alpha));
+      if ((k.name === 'rival' || k.name === 'kiter') && rivals.length > 0) {
+        const set = rivals[i % rivals.length];
+        const frame = set.frames[RIDE[(Math.floor(clock * 7) + i) % 4]];
+        const dx = x + Math.round(k.w / 2) - ANCHOR_X;
+        if (k.name === 'kiter' && set.kite.length > 0) this.kite(set, x, 0, seaY, clock + i * 0.37, dx, seaY - ANCHOR_Y, false);
+        this.ctx.drawImage(frame, dx, seaY - ANCHOR_Y);
+        continue;
+      }
+      const list = this.propCanvases(k.name);
+      if (list.length === 0) {
+        this.fill(k.color, x, seaY - Math.round(o.y) - k.h, k.w, k.h);
+        continue;
+      }
+      const img = list.length > 1 ? list[(Math.floor(clock * 6) + i) % list.length] : list[0];
+      this.ctx.drawImage(img, x, seaY - Math.round(o.y) - k.h);
     }
   }
 
-  private powerUp(g: Game, alpha: number, seaY: number): void {
-    const p = g.power;
-    const size = SURF.powerUpSize;
-    const x = Math.round(lerp(p.prevX, p.x, alpha));
-    const y = seaY - Math.round(p.y) - size + (Math.floor(g.clock * 4) % 2);
-    this.fill(C.gold, x, y, size, size);
-    this.fill(C.sun, x + 3, y + 3, size - 6, size - 6);
-    this.fill(C.white, x + 4, y + 4, 2, 2);
-    this.fill(C.orange, x, y + size - 2, size, 2);
-  }
-
-  private surfer(g: Game, alpha: number, seaY: number): void {
-    const s = g.surfer;
-    // blink during the grace period after the perfect wave
-    if (g.grace > 0 && Math.floor(g.clock * 12) % 2 === 0) return;
-    let bottom = seaY - Math.round(lerp(s.prevY, s.y, alpha));
-    if (g.phase === 'ready') bottom += Math.round(Math.sin(g.clock * 3));
-    const cx = SURF.playerX + SURF.playerW / 2;
-    let angle = lerp(s.prevRotation, s.rotation, alpha) * TAU;
-    if (s.state === 'crash') {
-      angle = Math.PI / 2;
-      bottom += 8;
+  powerUp(kind: 'wave' | 'gust', x: number, y: number, clock: number): void {
+    let img = this.powers[kind];
+    if (!img) {
+      img = rasterCanvas(powerRaster(kind));
+      this.powers[kind] = img;
     }
-    const pivotY = bottom - 19;
-    const cos = Math.cos(angle);
-    const sin = Math.sin(angle);
-    // parts as (center offset from pivot, size): board, body, head, hair
-    this.rotRect(cx, pivotY, 0, 17.5, 26, 3, cos, sin, C.white);
-    this.rotRect(cx, pivotY, 0, 3, 12, 24, cos, sin, C.coral);
-    this.rotRect(cx, pivotY, 1, -13, 8, 8, cos, sin, C.tan);
-    this.rotRect(cx, pivotY, 0, -16, 8, 3, cos, sin, C.brown);
+    this.ctx.drawImage(img, Math.round(x), Math.round(this.seaY - y - 12 + (Math.floor(clock * 4) % 2)));
   }
 
-  // ------------------------------------------------------------ HUD
+  /** Picks the frame for the athlete's state. */
+  frameFor(set: AthleteSprites, a: PoseView, alpha: number, clock: number): HTMLCanvasElement {
+    if (a.state === 'crash') return set.frames.fall;
+    if (a.state === 'air') {
+      const rot = lerp(a.prevRotation, a.rotation, alpha);
+      if (rot > 0.001 && set.spins.length > 0) {
+        const k = Math.round((rot % 1) * SPIN_STEPS) % SPIN_STEPS;
+        return k === 0 ? set.frames.air : set.spins[k];
+      }
+      return a.stateTime < 0.1 ? set.frames.takeoff : set.frames.air;
+    }
+    if (a.touching) return set.frames.land;
+    if (a.stateTime < 0.14 && clock > 0.5) return set.frames.land;
+    return set.frames[RIDE[Math.floor(clock * 7) % 4]];
+  }
 
-  /** Text with a drop shadow; `start`/`end` select a range without allocating. */
-  private text(text: string, x: number, y: number, color: number, scale: number, start = 0, end = text.length): void {
+  /**
+   * Draws an athlete whose hitbox's left edge is at `x` and whose board's
+   * underside is at altitude a.y. `scale` > 1 is for previews.
+   */
+  athlete(set: AthleteSprites, sport: SportId, a: PoseView, x: number, alpha: number, clock: number, scale = 1, surface = this.seaY, playerW = 16): void {
+    const frame = this.frameFor(set, a, alpha, clock);
+    const alt = Math.round(lerp(a.prevY, a.y, alpha));
+    const sink = a.state === 'crash' ? Math.min(12, Math.round(a.stateTime * 30)) : 0;
+    const dx = Math.round(x + (playerW / 2 - ANCHOR_X) * scale);
+    const dy = Math.round(surface - (alt - sink) * scale - ANCHOR_Y * scale);
+    if (sport === 'kite' && set.kite.length > 0) {
+      const spinning = a.state === 'air' && a.rotation > 0;
+      this.kite(set, x, alt - sink * 3, surface, clock, dx, dy, spinning, scale);
+    }
+    if (scale === 1) this.ctx.drawImage(frame, dx, dy);
+    else this.ctx.drawImage(frame, dx, dy, FRAME_W * scale, FRAME_H * scale);
+  }
+
+  /** Kite canopy above the rider and its two lines down to the bar. */
+  private kite(set: AthleteSprites, x: number, alt: number, surface: number, clock: number, fx: number, fy: number, spinning: boolean, scale = 1): void {
+    const img = set.kite[Math.floor(clock * 3) % set.kite.length];
+    // previews keep the kite closer above the rider so it fits on screen
+    const lift = scale === 1 ? KITE.kiteY + KITE.kiteH : 66;
+    const kx = Math.round(x + (KITE.kiteX - 11) * scale);
+    const ky = Math.round(surface - (alt + lift) * scale - scale);
+    const barX = fx + set.barTop[0] * scale;
+    const barY = fy + set.barTop[1] * scale;
+    const attachX = spinning ? fx + ANCHOR_X * scale : barX;
+    const attachY = spinning ? fy + (ANCHOR_Y - 26) * scale : barY;
+    this.line(kx + set.kiteTipL[0] * scale, ky + set.kiteTipL[1] * scale, attachX, attachY, C.slate);
+    this.line(kx + set.kiteTipR[0] * scale, ky + set.kiteTipR[1] * scale, attachX, attachY + 7 * scale, C.slate);
+    if (scale === 1) this.ctx.drawImage(img, kx, ky);
+    else this.ctx.drawImage(img, kx, ky, img.width * scale, img.height * scale);
+  }
+
+  // ------------------------------------------------------------ UI
+
+  text(text: string, x: number, y: number, color: number, scale: number, start = 0, end = text.length): void {
     this.font.drawShadowed(this.ctx, text, x, y, color, C.navy, scale, start, end);
   }
 
-  /** Height that centered() will use for this text. */
-  private lineHeight(text: string, W: number, scale: number): number {
+  lineHeight(text: string, scale: number, maxW = this.W - 8): number {
     const lineH = (GLYPH_H + 3) * scale;
-    return this.font.width(text, scale) <= W - 8 || splitPoint(text) < 0 ? lineH : 2 * lineH;
+    return this.font.width(text, scale) <= maxW || splitPoint(text) < 0 ? lineH : 2 * lineH;
   }
 
-  /** Centered text, wrapped on two lines when it does not fit. Returns the height used. */
-  private centered(text: string, W: number, y: number, color: number, scale: number): number {
+  /** Centered on cx, wrapped on two lines when wider than maxW. Returns the height used. */
+  centered(text: string, cx: number, y: number, color: number, scale: number, maxW = this.W - 8): number {
     const lineH = (GLYPH_H + 3) * scale;
-    if (this.font.width(text, scale) <= W - 8) {
-      this.text(text, Math.floor((W - this.font.width(text, scale)) / 2), y, color, scale);
+    const w = this.font.width(text, scale);
+    if (w <= maxW) {
+      this.text(text, Math.round(cx - w / 2), y, color, scale);
       return lineH;
     }
     const cut = splitPoint(text);
     if (cut < 0) {
-      this.text(text, 4, y, color, scale);
+      this.text(text, Math.round(cx - w / 2), y, color, scale);
       return lineH;
     }
     const w1 = this.font.widthOf(cut, scale);
     const w2 = this.font.widthOf(text.length - cut - 1, scale);
-    this.text(text, Math.floor((W - w1) / 2), y, color, scale, 0, cut);
-    this.text(text, Math.floor((W - w2) / 2), y + lineH, color, scale, cut + 1);
+    this.text(text, Math.round(cx - w1 / 2), y, color, scale, 0, cut);
+    this.text(text, Math.round(cx - w2 / 2), y + lineH, color, scale, cut + 1);
     return 2 * lineH;
   }
 
-  private number(value: number, digits: number, x: number, y: number, color: number, scale: number): void {
+  number(value: number, digits: number, x: number, y: number, color: number, scale: number): void {
     this.font.drawNumber(this.ctx, value, digits, x + scale, y + scale, C.navy, scale);
     this.font.drawNumber(this.ctx, value, digits, x, y, color, scale);
   }
 
-  private hud(g: Game, W: number, seaY: number): void {
-    const layout = this.display.layout;
-    // text at least about 2 CSS px per font pixel, so it stays readable on phones
-    const u = layout.cssWidth / layout.width < 2 ? 2 : 1;
+  /** Pixel-art button: dark outline, flat fill, a lighter top edge, centered label. */
+  button(r: Rect, label: string, style: ButtonStyle, scale: number, focused = false): void {
+    const fill = style === 'primary' ? C.coral : style === 'selected' ? C.gold : style === 'ghost' ? C.skyPale : C.navy;
+    const top = style === 'primary' ? C.rose : style === 'selected' ? C.sun : style === 'ghost' ? C.white : C.indigo;
+    const ink = style === 'normal' ? C.white : C.navy;
+    this.fill(focused ? C.white : C.ink, r.x - 1, r.y - 1, r.w + 2, r.h + 2);
+    if (focused) this.fill(C.ink, r.x - 2, r.y + r.h + 1, r.w + 4, 1);
+    this.fill(fill, r.x, r.y, r.w, r.h);
+    this.fill(top, r.x, r.y, r.w, scale);
+    const w = this.font.width(label, scale);
+    this.font.draw(this.ctx, label, Math.round(r.x + (r.w - w) / 2), Math.round(r.y + (r.h - GLYPH_H * scale) / 2), ink, scale);
+  }
+
+  /** Button with a pixel arrow pointing left (-1) or right (1); the font has no < >. */
+  arrowButton(r: Rect, dir: -1 | 1, scale: number, focused = false): void {
+    this.button(r, '', 'normal', scale, focused);
+    const top = Math.round(r.y + (r.h - 7 * scale) / 2);
+    const left = Math.round(r.x + (r.w - 4 * scale) / 2);
+    this.ctx.fillStyle = PALETTE_CSS[C.white];
+    for (let i = 0; i < 4; i++) {
+      const col = dir > 0 ? i : 3 - i;
+      this.ctx.fillRect(left + col * scale, top + i * scale, scale, (7 - 2 * i) * scale);
+    }
+  }
+
+  /** Square pause button: two bars. */
+  pauseButton(r: Rect, scale: number): void {
+    this.button(r, '', 'normal', scale);
+    const h = 7 * scale;
+    const top = Math.round(r.y + (r.h - h) / 2);
+    const left = Math.round(r.x + (r.w - 5 * scale) / 2);
+    this.fill(C.white, left, top, 2 * scale, h);
+    this.fill(C.white, left + 3 * scale, top, 2 * scale, h);
+  }
+
+  /** Three-tone swatch of a customization ramp. */
+  swatch(ramp: Ramp, x: number, y: number, w: number, h: number): void {
+    let css = this.swatches.get(ramp);
+    if (!css) {
+      css = rampCss(ramp);
+      this.swatches.set(ramp, css);
+    }
+    this.fill(C.ink, x - 1, y - 1, w + 2, h + 2);
+    const third = Math.floor(w / 3);
+    for (let i = 0; i < 3; i++) {
+      this.ctx.fillStyle = css[i];
+      this.ctx.fillRect(x + i * third, y, i === 2 ? w - 2 * third : third, h);
+    }
+  }
+
+  /** Panel behind menus: solid and outlined, readable over any background. */
+  panel(r: Rect, color: number = C.navy): void {
+    this.fill(C.ink, r.x - 1, r.y - 1, r.w + 2, r.h + 2);
+    this.fill(color, r.x, r.y, r.w, r.h);
+  }
+
+  /** Score in the top-right corner with the best score to its left. */
+  scoreLine(points: number, best: number, showPoints: boolean): void {
+    const u = this.u;
     const adv = ADVANCE * u;
     const margin = 6;
-
-    const points = g.points;
     const digits = Math.max(5, digitCount(points));
-    const scoreX = W - margin - digits * adv + u;
-    if (g.phase !== 'ready') this.number(points, digits, scoreX, margin, C.white, u);
-    if (g.best > 0) {
-      // "HI 00000  00000"
-      const bestDigits = Math.max(5, digitCount(g.best));
-      const bestX = scoreX - 2 * adv - bestDigits * adv;
-      this.number(g.best, bestDigits, bestX, margin, C.skyPale, u);
-      this.text(t.hi, bestX - 3 * adv, margin, C.skyPale, u);
-    }
-    const row2 = margin + (GLYPH_H + 4) * u;
-    if (g.phase === 'running' && g.score.combo > 0) {
-      this.text('x', W - margin - 2 * adv + u, row2, C.gold, u);
-      this.number(nextMultiplier(g.score), 1, W - margin - adv + u, row2, C.gold, u);
-    }
-    if (g.popupTime > 0) {
-      const rise = Math.round((0.9 - g.popupTime) * 20);
-      const y = seaY - SURF.playerH - 12 - GLYPH_H * u - rise;
-      this.text('+', SURF.playerX, y, C.gold, u);
-      this.number(g.popupPoints, digitCount(g.popupPoints), SURF.playerX + adv, y, C.gold, u);
-    }
-    if (g.perfectWave > 0) {
-      const y = row2 + (GLYPH_H + 4) * u;
-      this.centered(t.perfectWave, W, y, C.sun, u);
-      const full = 60 * u;
-      const x = Math.floor((W - full) / 2);
-      const barY = y + (GLYPH_H + 3) * u;
-      this.fill(C.navy, x, barY, full, 2 * u + 1);
-      this.fill(C.sun, x, barY, Math.ceil((g.perfectWave / SURF.perfectWaveTime) * full), 2 * u);
-    }
-
-    const horizon = seaY - HORIZON_ABOVE_SEA;
-    const mid = Math.floor(horizon / 2);
-    let y: number;
-    switch (g.phase) {
-      case 'ready': {
-        const start = this.touch ? t.startTouch : t.startDesktop;
-        // title block centered in the sky, smaller when the sky is short
-        let title = 4 * u;
-        let sport = 2 * u;
-        const block = () =>
-          this.lineHeight(t.title, W, title) +
-          this.lineHeight(t.sport, W, sport) +
-          this.lineHeight(start, W, u) +
-          this.lineHeight(t.hintHold, W, u) +
-          this.lineHeight(t.hintTrick, W, u) +
-          4 * u;
-        if (block() > horizon - 24 * u) {
-          title = 3 * u;
-          sport = u + 1;
-        }
-        y = Math.max(margin + (GLYPH_H + 4) * u, Math.floor((horizon - block()) / 2));
-        y += this.centered(t.title, W, y, C.white, title);
-        y += this.centered(t.sport, W, y, C.sun, sport) + 2 * u;
-        y += this.centered(start, W, y, C.white, u) + 2 * u;
-        y += this.centered(t.hintHold, W, y, C.skyPale, u);
-        this.centered(t.hintTrick, W, y, C.skyPale, u);
-        break;
-      }
-      case 'paused':
-        y = mid - 12 * u;
-        y += this.centered(t.paused, W, y, C.white, 2 * u) + 2 * u;
-        this.centered(this.touch ? t.resumeTouch : t.resumeDesktop, W, y, C.skyPale, u);
-        break;
-      case 'over': {
-        y = mid - 24 * u;
-        y += this.centered(t.wipeout, W, y, C.white, 2 * u);
-        const scoreDigits = digitCount(points);
-        this.number(points, scoreDigits, Math.floor((W - this.font.widthOf(scoreDigits, 2 * u)) / 2), y, C.sun, 2 * u);
-        y += (GLYPH_H + 4) * 2 * u;
-        if (g.newBest) y += this.centered(t.newBest, W, y, C.gold, u);
-        if (g.overTime >= SURF.restartDelay) this.centered(this.touch ? t.restartTouch : t.restartDesktop, W, y + 2 * u, C.white, u);
-        break;
-      }
-      case 'running':
-        break;
+    const scoreX = this.W - margin - digits * adv + u;
+    if (showPoints) this.number(points, digits, scoreX, margin, C.white, u);
+    if (best > 0) {
+      const bestDigits = Math.max(5, digitCount(best));
+      const bestX = (showPoints ? scoreX - 2 * adv : this.W - margin + u) - bestDigits * adv;
+      this.number(best, bestDigits, bestX, margin, C.skyPale, u);
+      this.font.drawShadowed(this.ctx, t.hi, bestX - 3 * adv, margin, C.skyPale, C.navy, u);
     }
   }
 }

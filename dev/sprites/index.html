@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="data:," />
+    <title>BOB sprites</title>
+    <style>
+      body { margin: 0; padding: 12px; background: #1b2a4a; color: #e8f4ff; font: 13px/1.4 monospace; }
+      header { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+      button { font: inherit; padding: 4px 10px; border: 1px solid #0d1321; background: #2f4a7a; color: inherit; cursor: pointer; }
+      button.on { background: #ffcf4a; color: #0d1321; }
+      .look { margin: 0 0 16px; }
+      .look h2 { font-size: 13px; margin: 0 0 4px; }
+      .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-end; }
+      figure { margin: 0; background: #5ab0ec; }
+      figure.anim { background: #8fd3f5; }
+      figcaption { font-size: 10px; text-align: center; background: #0d1321; }
+      canvas { display: block; image-rendering: pixelated; }
+    </style>
+  </head>
+  <body>
+    <header id="controls"></header>
+    <main id="sheet"></main>
+    <script type="module" src="/src/dev/sprites.ts"></script>
+  </body>
+</html>

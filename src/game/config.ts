@@ -46,6 +46,92 @@ export const SURF = {
 
 export type SurfConfig = typeof SURF;
 
+/** Settings every sport shares: speed ramp, obstacle spacing, hitbox, power-ups. */
+export interface RunConfig {
+  readonly playerX: number;
+  readonly playerW: number;
+  readonly playerH: number;
+  readonly hitboxInset: number;
+  readonly startSpeed: number;
+  readonly maxSpeed: number;
+  readonly acceleration: number;
+  readonly minGapTime: number;
+  readonly maxGapTimeStart: number;
+  readonly maxGapTimeEnd: number;
+  readonly firstGap: number;
+  readonly powerUpSize: number;
+  readonly powerUpMinInterval: number;
+  readonly powerUpChance: number;
+  readonly perfectWaveTime: number;
+  readonly powerGrace: number;
+  readonly restartDelay: number;
+}
+
+/**
+ * Kitesurf: a tap is a high jump with long hangtime; pressing and holding
+ * again in the air spins, one or more full turns. The kite flies above
+ * and ahead of the rider and has its own hitbox.
+ */
+export const KITE = {
+  ...SURF,
+  jumpVelocity: 300,
+  gravity: 620,
+  /** Seconds per full spin while the button is held in the air. */
+  spinTime: 0.42,
+  /** Landing with this share of a turn left (or past) is still clean. */
+  spinTolerance: 0.15,
+  /** Kite hitbox relative to the rider: left edge, bottom altitude, size. */
+  kiteX: 12,
+  kiteY: 86,
+  kiteW: 38,
+  kiteH: 11,
+  startSpeed: 200,
+  maxSpeed: 460,
+  acceleration: 3,
+  // a kite jump lasts about a second, so obstacles need more room
+  minGapTime: 1.15,
+  maxGapTimeStart: 2.3,
+  maxGapTimeEnd: 1.6,
+  firstGap: 380,
+  /** Wind gust power-up: mega jump, untouchable until landing. */
+  gustVelocity: 380,
+} as const;
+
+export type KiteConfig = typeof KITE;
+
+/**
+ * Wing foil: holding the button lifts the foil, releasing lets it sink.
+ * The board flies between the water (slows you down) and the breach
+ * height (the foil leaves the water: wipeout).
+ */
+export const WING = {
+  ...SURF,
+  lift: 440,
+  sink: 400,
+  maxClimb: 60,
+  /** Board altitude where the foil breaches. */
+  breach: 20,
+  /** From the board's underside to the foil wing. */
+  mastLength: 22,
+  startAltitude: 10,
+  /** Speed while the board drags in the water, recovering per second after. */
+  dragFactor: 0.6,
+  dragRecovery: 0.8,
+  startSpeed: 180,
+  maxSpeed: 420,
+  acceleration: 2.8,
+  minGapTime: 0.8,
+  maxGapTimeStart: 1.9,
+  maxGapTimeEnd: 1.25,
+  firstGap: 340,
+  /** Wind gust power-up: faster, higher breach limit, untouchable. */
+  gustTime: 5,
+  gustSpeed: 1.25,
+  gustBreach: 34,
+} as const;
+
+export type WingConfig = typeof WING;
+
 export const SCORING = {
   /** Distance points per pixel travelled. */
   pointsPerPx: 0.1,

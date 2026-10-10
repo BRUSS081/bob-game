@@ -72,3 +72,38 @@ export function encodeIndexedPng(
   }
   return png;
 }
+
+/** Encodes an 8-bit RGBA PNG (color type 6) from 0xAABBGGRR pixels. */
+export function encodeRgbaPng(width: number, height: number, pixels: Uint32Array): Uint8Array {
+  const header = new Uint8Array(13);
+  const hv = new DataView(header.buffer);
+  hv.setUint32(0, width);
+  hv.setUint32(4, height);
+  header[8] = 8;
+  header[9] = 6;
+  const raw = new Uint8Array((width * 4 + 1) * height);
+  for (let y = 0; y < height; y++) {
+    const row = y * (width * 4 + 1);
+    for (let x = 0; x < width; x++) {
+      const v = pixels[y * width + x];
+      const o = row + 1 + x * 4;
+      raw[o] = v & 0xff;
+      raw[o + 1] = (v >>> 8) & 0xff;
+      raw[o + 2] = (v >>> 16) & 0xff;
+      raw[o + 3] = (v >>> 24) & 0xff;
+    }
+  }
+  const parts = [
+    new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk('IHDR', header),
+    chunk('IDAT', deflateSync(raw, { level: 9 })),
+    chunk('IEND', new Uint8Array(0)),
+  ];
+  const png = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+  let offset = 0;
+  for (const p of parts) {
+    png.set(p, offset);
+    offset += p.length;
+  }
+  return png;
+}

@@ -1,5 +1,5 @@
 import { C } from '../../src/render/palette.ts';
-import { Raster, rng, sprite } from './raster.ts';
+import { Raster, rng, sprite } from '../../src/sprites/raster.ts';
 
 export const W = 480;
 export const H = 270;

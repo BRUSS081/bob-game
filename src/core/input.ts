@@ -1,16 +1,37 @@
-const KEYS = new Set(['Space', 'ArrowUp']);
+/** Keys that act as the game's single button. */
+const GAME_KEYS = new Set(['Space', 'ArrowUp']);
+/** Keys used by menus; all of them are kept from scrolling the page. */
+const MENU_KEYS = new Set(['ArrowLeft', 'ArrowRight', 'ArrowDown', 'Enter', 'Escape', 'Tab', 'KeyR']);
+
+export type InputKind = 'pointer' | 'key';
+
+export interface InputEvent {
+  kind: InputKind;
+  /** Pointer position in CSS pixels (viewport). */
+  x: number;
+  y: number;
+  /** KeyboardEvent.code for keys. */
+  code: string;
+}
+
+const CAPACITY = 16;
 
 /**
- * The game's single button: Space, Arrow Up, mouse click or a tap anywhere.
- * Presses are queued so none is lost between fixed steps; `held` tells
- * whether the button is down right now.
+ * Keyboard, mouse and touch. Presses become queued events (taps keep their
+ * position, so menus can hit-test them); `held` is the state of the game's
+ * single button: Space, Arrow Up, or any finger or mouse button down.
+ * The queue is preallocated: no garbage while playing.
  */
-export class OneButton {
-  private presses = 0;
+export class Input {
+  readonly events: InputEvent[] = [];
+  count = 0;
   private keyDown = false;
   private pointers = 0;
+  /** A pointer that started on a button does not count as holding the game button. */
+  private suppressed = false;
 
   constructor(target: Window = window) {
+    for (let i = 0; i < CAPACITY; i++) this.events.push({ kind: 'key', x: 0, y: 0, code: '' });
     target.addEventListener('keydown', this.onKeyDown);
     target.addEventListener('keyup', this.onKeyUp);
     target.addEventListener('pointerdown', this.onPointerDown);
@@ -29,46 +50,60 @@ export class OneButton {
   }
 
   get held(): boolean {
-    return this.keyDown || this.pointers > 0;
+    return this.keyDown || (this.pointers > 0 && !this.suppressed);
   }
 
-  /** Takes one queued press, if any. */
-  consumePress(): boolean {
-    if (this.presses === 0) return false;
-    this.presses--;
-    return true;
+  /** Call when a pointer press was used by a button, so holding it does not drive the game. */
+  suppressHeld(): void {
+    if (this.pointers > 0) this.suppressed = true;
   }
 
-  private press(): void {
-    // a burst of presses beyond a few is noise, not intent
-    if (this.presses < 3) this.presses++;
+  clear(): void {
+    this.count = 0;
+  }
+
+  private push(kind: InputKind, x: number, y: number, code: string): void {
+    if (this.count >= CAPACITY) return;
+    const e = this.events[this.count++];
+    e.kind = kind;
+    e.x = x;
+    e.y = y;
+    e.code = code;
   }
 
   private readonly onKeyDown = (e: KeyboardEvent): void => {
-    if (!KEYS.has(e.code)) return;
+    const game = GAME_KEYS.has(e.code);
+    if (!game && !MENU_KEYS.has(e.code)) return;
     e.preventDefault();
     if (e.repeat) return;
-    this.keyDown = true;
-    this.press();
+    if (game) this.keyDown = true;
+    this.push('key', 0, 0, e.code);
   };
 
   private readonly onKeyUp = (e: KeyboardEvent): void => {
-    if (KEYS.has(e.code)) this.keyDown = false;
+    if (GAME_KEYS.has(e.code)) this.keyDown = false;
   };
 
   private readonly onPointerDown = (e: PointerEvent): void => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     e.preventDefault();
     this.pointers++;
-    this.press();
+    this.push('pointer', e.clientX, e.clientY, '');
   };
 
   private readonly onPointerUp = (): void => {
     this.pointers = Math.max(0, this.pointers - 1);
+    if (this.pointers === 0) this.suppressed = false;
   };
 
   private readonly release = (): void => {
     this.keyDown = false;
     this.pointers = 0;
+    this.suppressed = false;
   };
+}
+
+/** Is this key one of the game's single-button keys? */
+export function isGameKey(code: string): boolean {
+  return GAME_KEYS.has(code);
 }

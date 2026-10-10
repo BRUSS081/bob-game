@@ -38,6 +38,8 @@ STYLE: modern high-detail pixel art for a 2D side-scrolling mobile game, crisp h
 ### Fase 2 — Setup e loop di gioco
 Vite + TypeScript + Canvas 2D, Vitest, collegamento del repository a Vercel. Loop di gioco con rettangoli placeholder, solo surf: input desktop e mobile, collisioni, punteggio, game over, restart.
 
+> Nota: su richiesta dell'utente le fasi 4 e 5 (BOB/BOBBA, personalizzazione, cambio sport, kitesurf e wing foil) sono state anticipate e fatte prima della fase 3.
+
 ### Fase 3 — Ambiente
 Parallax, mare, sistema ora/meteo, particelle.
 

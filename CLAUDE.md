@@ -27,10 +27,10 @@ La fonte di verità è **[docs/BRIEF.md](docs/BRIEF.md)**: leggilo per intero al
 | Fase | Stato |
 |---|---|
 | 1 — Concept art | fatta: pixel art di riferimento disegnate in codice (`npm run reference` → `/reference`) |
-| 2 — Setup e loop di gioco | fatta, in attesa di ok: loop surf con placeholder, 71 test, preview Vercel del branch |
-| 3 — Ambiente | da fare |
-| 4 — Sprite e personalizzazione | da fare |
-| 5 — Kitesurf e wing foil | da fare |
+| 2 — Setup e loop di gioco | fatta |
+| 3 — Ambiente | da fare (prossima: le fasi 4 e 5 sono state anticipate su richiesta dell'utente) |
+| 4 — Sprite e personalizzazione | fatta, in attesa di ok: sprite BOB/BOBBA in codice, `/dev/sprites`, home con sport e BOB/BOBBA, personalizzazione a 3 schede |
+| 5 — Kitesurf e wing foil | fatta, in attesa di ok: meccaniche, ostacoli e power-up per sport, bot su 3 sport, 122 test |
 | 6 — Classifica globale | da fare |
 | 7 — Rifinitura | da fare |
 
@@ -44,4 +44,6 @@ Aggiorna questa tabella a ogni fine fase.
 - Il CDN delle immagini Higgsfield (`d8j0ntlcm91z4.cloudfront.net`) è bloccato dalla network policy dell'ambiente: per salvare i PNG in `/reference` va aggiunto agli Allowed domains.
 - Fase 2: tuning surf in `src/game/config.ts`. `tests/game.test.ts` contiene un bot che gioca 150 s su più seed: se un cambio di tuning rende impossibile una sequenza, fallisce.
 - Vercel: account Hobby, progetto `bob-game` (`prj_M889Vz8ZFCT4SN3LtonHIkKFDsle`) collegato a GitHub: ogni push crea un deploy. Con il connettore MCP chiama i tool **senza** `teamId`/`slug` (con `teamId` risponde 403 sullo scope `bruss1`). Le preview hanno la Vercel Authentication attiva (serve il login Vercel per aprirle). URL: https://bob-game-tau.vercel.app (alias del branch: `bob-game-git-claude-vigilant-hawking-qmmxhx-bruss1.vercel.app`). `*.vercel.app` è bloccato dalla network policy di questo ambiente.
-- Finché Vercel non è collegato, la build giocabile è pubblicata come Artifact privato: https://claude.ai/artifact/HntjK84i2eX8KPYm4UGLjL (file unico generato da `dist/` con JS e CSS inline).
+- Fasi 4–5: `src/app.ts` gestisce le schermate in `src/ui/` (home, customize, play). Profilo in `src/custom/profile.ts`: chiavi `bob.sport`, `bob.rider` (BOB/BOBBA unico per tutti gli sport), `bob.look.<sport>.<bob|bobba>`, `bob.best.<sport>`. Modello di personalizzazione in `src/custom/athlete.ts` (OPTIONS, schede athlete/suit/gear); sprite composti in `src/sprites/compose.ts`, palette swap con le rampe di `src/sprites/ramps.ts`, cache in `src/sprites/sheet.ts`. Tuning per sport in `src/game/config.ts` (SURF, KITE, WING); il bot in `tests/helpers/bot.ts` prova che ogni sport è risolvibile.
+- Pagina di revisione sprite: `npm run dev` → `/dev/sprites/` (solo sviluppo, non va in build).
+- Oltre a Vercel, la build giocabile è pubblicata come Artifact privato: https://claude.ai/artifact/HntjK84i2eX8KPYm4UGLjL (file unico generato da `dist/` con JS e CSS inline).

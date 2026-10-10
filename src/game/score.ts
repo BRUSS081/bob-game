@@ -31,9 +31,9 @@ export function nextMultiplier(s: Score): number {
   return Math.min(s.combo + 1, SCORING.maxMultiplier);
 }
 
-/** Records a clean trick landing; returns the points awarded. */
-export function landTrick(s: Score, boosted: boolean): number {
-  const points = SCORING.trickBase * nextMultiplier(s) * (boosted ? SCORING.powerFactor : 1);
+/** Records a clean trick landing (`spins` full turns); returns the points awarded. */
+export function landTrick(s: Score, boosted: boolean, spins = 1): number {
+  const points = SCORING.trickBase * Math.max(1, spins) * nextMultiplier(s) * (boosted ? SCORING.powerFactor : 1);
   s.combo++;
   s.trickPoints += points;
   return points;

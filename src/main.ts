@@ -1,37 +1,27 @@
 import './style.css';
+import { App } from './app.ts';
 import { Display } from './core/display.ts';
-import { OneButton } from './core/input.ts';
+import { Input } from './core/input.ts';
 import { Loop } from './core/loop.ts';
-import { load, save } from './core/storage.ts';
-import { Game } from './game/game.ts';
-import { Renderer } from './render/renderer.ts';
-
-const BEST_KEY = 'bob.best.surf';
 
 const canvas = document.getElementById('game');
 if (!(canvas instanceof HTMLCanvasElement)) throw new Error('Missing #game canvas');
 
 const display = new Display(canvas);
-const input = new OneButton(window);
-const game = new Game(load(BEST_KEY, 0), {
-  onGameOver: (_score, best) => save(BEST_KEY, best),
-});
-const renderer = new Renderer(display);
-
-game.setViewWidth(display.layout.width);
-display.onResize((layout) => game.setViewWidth(layout.width));
+const input = new Input(window);
+const app = new App(display, input);
 
 // pause automatically when the tab or the window loses focus
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) game.pause();
+  if (document.hidden) app.blur();
 });
-window.addEventListener('blur', () => game.pause());
+window.addEventListener('blur', () => app.blur());
 
 const loop = new Loop(
-  (dt) => game.update(dt, input.consumePress(), input.held),
-  (alpha) => renderer.render(game, alpha),
+  (dt) => app.update(dt),
+  (alpha) => app.render(alpha),
 );
 loop.start();
 
 // development only: inspect and drive the game from the console
-if (import.meta.env.DEV) Object.assign(window, { game });
+if (import.meta.env.DEV) Object.assign(window, { app });

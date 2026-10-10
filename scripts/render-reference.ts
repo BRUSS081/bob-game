@@ -7,7 +7,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { C, PALETTE } from '../src/render/palette.ts';
 import { encodeIndexedPng } from './reference/png.ts';
-import { Raster } from './reference/raster.ts';
+import { Raster } from '../src/sprites/raster.ts';
 import { H, LIGHTINGS, W, renderPaletteSheet, renderScene } from './reference/scene.ts';
 
 const OUT = new URL('../reference/', import.meta.url);

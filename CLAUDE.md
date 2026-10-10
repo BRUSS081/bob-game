@@ -44,3 +44,4 @@ Aggiorna questa tabella a ogni fine fase.
 - Il CDN delle immagini Higgsfield (`d8j0ntlcm91z4.cloudfront.net`) è bloccato dalla network policy dell'ambiente: per salvare i PNG in `/reference` va aggiunto agli Allowed domains.
 - Fase 2: tuning surf in `src/game/config.ts`. `tests/game.test.ts` contiene un bot che gioca 150 s su più seed: se un cambio di tuning rende impossibile una sequenza, fallisce.
 - Vercel: account Hobby `castionibruno18-4160`, team `team_3QbT5waikINyB3Bmbr7fryWj` (scope `bruss1`). Il connettore MCP risponde 403 su quello scope; `vercel.json` è pronto per l'import manuale del repo.
+- Finché Vercel non è collegato, la build giocabile è pubblicata come Artifact privato: https://claude.ai/artifact/HntjK84i2eX8KPYm4UGLjL (file unico generato da `dist/` con JS e CSS inline).

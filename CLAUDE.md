@@ -27,7 +27,7 @@ La fonte di verità è **[docs/BRIEF.md](docs/BRIEF.md)**: leggilo per intero al
 | Fase | Stato |
 |---|---|
 | 1 — Concept art | fatta: pixel art di riferimento disegnate in codice (`npm run reference` → `/reference`) |
-| 2 — Setup e loop di gioco | fatta, in attesa di ok: loop surf con placeholder, 71 test. Preview Vercel bloccata: il connettore non ha accesso allo scope `bruss1` |
+| 2 — Setup e loop di gioco | fatta, in attesa di ok: loop surf con placeholder, 71 test, preview Vercel del branch |
 | 3 — Ambiente | da fare |
 | 4 — Sprite e personalizzazione | da fare |
 | 5 — Kitesurf e wing foil | da fare |
@@ -43,5 +43,5 @@ Aggiorna questa tabella a ogni fine fase.
 - Generate anche via MCP: 5 su Figma (gemini-3.1-flash-image, piano Starter, 1376×768, link validi 7 giorni) e 5 su Canva (il quinto, ostacoli, è riuscito al secondo tentativo). Anche `www.figma.com` è bloccato dalla network policy, quindi i file vanno caricati in `/reference` a mano.
 - Il CDN delle immagini Higgsfield (`d8j0ntlcm91z4.cloudfront.net`) è bloccato dalla network policy dell'ambiente: per salvare i PNG in `/reference` va aggiunto agli Allowed domains.
 - Fase 2: tuning surf in `src/game/config.ts`. `tests/game.test.ts` contiene un bot che gioca 150 s su più seed: se un cambio di tuning rende impossibile una sequenza, fallisce.
-- Vercel: account Hobby `castionibruno18-4160`, team `team_3QbT5waikINyB3Bmbr7fryWj` (scope `bruss1`). Il connettore MCP risponde 403 su quello scope; `vercel.json` è pronto per l'import manuale del repo.
+- Vercel: account Hobby, progetto `bob-game` (`prj_M889Vz8ZFCT4SN3LtonHIkKFDsle`) collegato a GitHub: ogni push crea un deploy. Con il connettore MCP chiama i tool **senza** `teamId`/`slug` (con `teamId` risponde 403 sullo scope `bruss1`). Le preview hanno la Vercel Authentication attiva (serve il login Vercel per aprirle).
 - Finché Vercel non è collegato, la build giocabile è pubblicata come Artifact privato: https://claude.ai/artifact/HntjK84i2eX8KPYm4UGLjL (file unico generato da `dist/` con JS e CSS inline).

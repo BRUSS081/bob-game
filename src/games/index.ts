@@ -1,5 +1,6 @@
 import type { Context, Screen, ScreenId } from '../ui/screen.ts';
 import { FishingScreen } from './fishing.ts';
+import { FreediveScreen } from './freedive.ts';
 import { GullScreen } from './gull.ts';
 import { SupScreen } from './sup.ts';
 import { SwellsScreen } from './swells.ts';
@@ -12,4 +13,5 @@ export function registerGames(ctx: Context, add: (id: ScreenId, screen: Screen) 
   add('wreck', new WreckScreen(ctx));
   add('swells', new SwellsScreen(ctx));
   add('fishing', new FishingScreen(ctx));
+  add('freedive', new FreediveScreen(ctx));
 }

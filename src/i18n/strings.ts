@@ -118,7 +118,13 @@ export const STRINGS = {
         sinkHint: 'HOLD TO SINK, LET GO TO RISE',
       },
       freedive: {
-        // freedive
+        clean: 'CLEAN SEA',
+        ouch: 'OUCH!',
+        banked: 'DIVE',
+        blackout: 'BLACKOUT! BACK TO THE SURFACE',
+        deepest: 'DEEPEST',
+        o2: 'O2',
+        hint: 'HOLD TO DIVE',
       },
       snap: {
         // snap

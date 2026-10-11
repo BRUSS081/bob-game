@@ -135,7 +135,13 @@ export const STRINGS = {
         // regatta
       },
       slalom: {
-        // slalom
+        jump: 'JUMP!',
+        bump: 'BUMP!',
+        gates: 'GATES',
+        caught: 'THE FOAM GOT YOU',
+        foam: 'FOAM!',
+        touchHint: 'HOLD LEFT OR RIGHT TO STEER',
+        keyHint: 'ARROWS TO STEER, SPACE TO PUMP',
       },
       wreck: {
         slipped: 'SLIPPED!',

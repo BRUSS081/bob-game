@@ -170,7 +170,21 @@ export const STRINGS = {
         hint: 'HOLD TO AIM, LET GO TO THROW',
       },
       reef: {
-        // reef
+        net: 'NET',
+        turtle: 'TURTLE',
+        diver: 'DIVER',
+        upgrade: 'UPGRADE',
+        max: 'TOP LEVEL',
+        built: 'BUILT!',
+        upgraded: 'UPGRADED!',
+        wave: 'WAVE',
+        hurt: 'OUCH!',
+        stopped: 'STOPPED',
+        saved: 'REEF SAVED!',
+        lost: 'THE REEF IS HURT',
+        reef: 'REEF',
+        nextTouch: 'TAP THE WATER FOR THE NEXT WAVE',
+        nextKey: 'SPACE FOR THE NEXT WAVE',
       },
       gull: {
         fish: 'FISH',

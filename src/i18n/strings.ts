@@ -128,7 +128,8 @@ export const STRINGS = {
         // reef
       },
       gull: {
-        // gull
+        fish: 'FISH',
+        splash: 'SPLASH!',
       },
       aquarium: {
         // aquarium

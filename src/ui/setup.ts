@@ -129,11 +129,15 @@ export class SetupScreen implements Screen {
     const arrowW = 12 * u;
     const nameW = r.font.width(t.modes.freeride.name, u) + 10 * u;
     const lineH = (GLYPH_H + 3) * u;
-    const block = (GLYPH_H + 3) * 2 * u + gap + 2 * (lineH + rowH + gap) + 2 * lineH + lineH + gap + rowH;
+    const rows = 2 * (lineH + rowH + gap) + 2 * lineH + lineH + gap + rowH;
+    // a big title when there is room, a small one or none on short screens
+    const room = H - 2 * margin;
+    const titleScale = (GLYPH_H + 3) * 2 * u + gap + rows <= room ? 2 * u : (GLYPH_H + 3) * u + gap + rows <= room ? u : 0;
+    const block = (titleScale > 0 ? (GLYPH_H + 3) * titleScale + gap : 0) + rows;
     const cx = landscape ? Math.round(W * 0.62) : Math.round(W / 2);
     let y = Math.max(margin, Math.min(Math.round((seaY - block) / 2), H - block - margin));
 
-    y += r.centered(t.games.runner.name, cx, y, C.white, 2 * u) + gap;
+    if (titleScale > 0) y += r.centered(t.games.runner.name, cx, y, C.white, titleScale) + gap;
 
     const hasSport = modeHasSport(this.mode);
     y = this.selector(t.sport, hasSport ? t.sports[sport] : t.allSports, this.sportPrev, this.sportNext, this.focus === SPORT, hasSport, cx, y, nameW);

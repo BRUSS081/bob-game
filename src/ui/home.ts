@@ -20,6 +20,24 @@ const BOTTOM_ITEMS: readonly { icon: IconName; label: 'look' | 'missions' | 'alb
 ];
 
 /**
+ * Sizes of the home block in UI units, largest first: title, game icon,
+ * game name, card text, gap. A title of 0 leaves it out.
+ */
+const FITS: readonly (readonly [number, number, number, number, number])[] = [
+  [3, 3, 2, 1, 4],
+  [2, 3, 2, 1, 4],
+  [2, 2, 2, 1, 3],
+  [1, 1.5, 1, 0.5, 1.5],
+  [0, 1.5, 1, 0.5, 1.5],
+  [0, 1, 0.5, 0.5, 1],
+];
+
+/** A size from FITS in whole pixels: at least 1 unless it is 0. */
+function fitSize(m: number, u: number): number {
+  return Math.max(m > 0 ? 1 : 0, Math.floor(m * u));
+}
+
+/**
  * Title screen, kept simple: one game at a time on a carousel, one PLAY,
  * and three small buttons below (look, missions, album). BOB or BOBBA is
  * a chip in the corner. The chosen athlete rides by in the background.
@@ -154,23 +172,35 @@ export class HomeScreen implements Screen {
     r.icon('sky', gear.x + (rowH - ICON * gearS) / 2, gear.y + (rowH - ICON * gearS) / 2, gearS);
     this.drawBest(margin, gear.x - 4 * u);
 
-    // the block: title, card (arrows, icon, name, tagline, dots), play, bottom row
-    const gap = 4 * u;
-    const iconScale = 3 * u;
-    const nameScale = 2 * u;
-    // the card keeps one size for every game: room for a two-line tagline
-    const cardW = Math.min(W - 2 * margin - 2 * (12 * u + gap), 150 * u);
+    // the block: title, card (arrows, icon, name, tagline, dots), play, bottom row;
+    // the largest sizes that fit the height (short landscape phones shrink the card, never the buttons)
     const tagline = t.games[this.game].tagline;
-    const tagH = 2 * (GLYPH_H + 3) * u;
-    const cardH = ICON * iconScale + 4 * u + (GLYPH_H + 3) * nameScale + tagH + 11 * u;
-    const rest = 2 * gap + cardH + gap + rowH + 2 * gap + rowH;
-    const top = margin + rowH + gap;
-    const title = GLYPH_H * 3 * u + rest > H - top - margin ? 2 * u : 3 * u;
+    const top = margin + rowH + 4 * u;
+    let gap = 0;
+    let iconScale = 0;
+    let nameScale = 0;
+    let cu = 0;
+    let title = 0;
+    let cardH = 0;
+    let rest = 0;
+    for (let f = 0; f < FITS.length; f++) {
+      const k = FITS[f];
+      title = fitSize(k[0], u);
+      iconScale = fitSize(k[1], u);
+      nameScale = fitSize(k[2], u);
+      cu = fitSize(k[3], u);
+      gap = fitSize(k[4], u);
+      // the card keeps one size for every game: room for a two-line tagline
+      cardH = ICON * iconScale + 4 * cu + (GLYPH_H + 3) * nameScale + 2 * (GLYPH_H + 3) * cu + 11 * cu;
+      rest = 2 * gap + cardH + gap + rowH + 2 * gap + rowH;
+      if (GLYPH_H * title + rest <= H - top - margin) break;
+    }
+    const cardW = Math.min(W - 2 * margin - 2 * (12 * u + gap), 150 * cu);
     const block = GLYPH_H * title + rest;
     const cx = landscape ? Math.round(W * 0.62) : Math.round(W / 2);
     let y = Math.max(top, Math.min(Math.round((seaY - block) / 2) + gap, H - block - margin));
 
-    r.centered(t.title, cx, y, C.white, title);
+    if (title > 0) r.centered(t.title, cx, y, C.white, title);
     y += GLYPH_H * title + 2 * gap;
 
     // card with arrows on its sides
@@ -181,13 +211,13 @@ export class HomeScreen implements Screen {
     setRect(this.next, this.card.x + cardW + gap, y + cardH / 2 - rowH / 2, arrowW, rowH);
     r.arrowButton(this.prev, -1, u);
     r.arrowButton(this.next, 1, u);
-    let cy = y + 4 * u;
+    let cy = y + 4 * cu;
     r.icon(this.game, cx - (ICON * iconScale) / 2, cy, iconScale);
-    cy += ICON * iconScale + 4 * u;
+    cy += ICON * iconScale + 4 * cu;
     cy += r.centered(t.games[this.game].name, cx, cy, C.sun, nameScale);
-    r.centered(tagline, cx, cy, C.white, u, cardW - 8 * u);
+    r.centered(tagline, cx, cy, C.white, cu, cardW - 8 * cu);
     // page dots
-    const dot = u;
+    const dot = cu;
     const dotsW = GAME_IDS.length * 3 * dot;
     const gi = GAME_IDS.indexOf(this.game);
     for (let i = 0; i < GAME_IDS.length; i++) {
@@ -204,7 +234,9 @@ export class HomeScreen implements Screen {
     const totalW = BOTTOM_ITEMS.length * bw + (BOTTOM_ITEMS.length - 1) * gap;
     const scale = totalW > W - 2 * margin ? 0 : 1;
     const itemW = scale ? bw : Math.floor((W - 2 * margin - (BOTTOM_ITEMS.length - 1) * gap) / BOTTOM_ITEMS.length);
-    const startX = Math.round(cx - (BOTTOM_ITEMS.length * itemW + (BOTTOM_ITEMS.length - 1) * gap) / 2);
+    const rowW = BOTTOM_ITEMS.length * itemW + (BOTTOM_ITEMS.length - 1) * gap;
+    // centered under the card, but never past the screen edges
+    const startX = Math.round(Math.max(margin, Math.min(cx - rowW / 2, W - margin - rowW)));
     // labels show only when every one of them fits, so the three buttons always look alike
     const iconS = Math.max(1, Math.floor((rowH - 2 * u) / ICON));
     let fits = true;

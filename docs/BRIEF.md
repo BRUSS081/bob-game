@@ -113,12 +113,25 @@ Wing foil
 
 Le tre modalità devono avere difficoltà simile. Dopo i playtest proponimi tu gli aggiustamenti.
 
+### Aggiunte di gameplay (proposte da Claude, approvate dall'utente)
+- Bonus "al pelo": passare a 4 px o meno da un ostacolo stando in aria dà punti; saltare sopra rivali, kiter e barche dà un bonus.
+- Ritmo a ondate: tratti normali, "serie" fitte e pause calme per i trick. Il gap minimo non cambia, quindi resta tutto superabile. La velocità sale più in fretta all'inizio e più piano vicino al massimo.
+- Wing foil, zona flow: volare appena sotto il limite di breach riempie un moltiplicatore dei punti distanza fino a x3.
+- Rivali vivi: fanno un salto lontano dal giocatore.
+- Delfini: evento raro, saltare insieme a loro dà un bonus.
+- Sfida del giorno per sport: stesso seme per tutti nello stesso giorno, record giornaliero, fantasma della run migliore e bandierina dove è finita.
+- Missioni: 12, tre aperte alla volta; ognuna sblocca un colore speciale.
+- Tutorial alla prima partita di ogni sport: il gioco si ferma e mostra TAP / HOLD nel momento giusto, senza poter cadere.
+- Effetti: fermo immagine e scossa alla caduta, moltiplicatore combo che pulsa.
+- Cartolina pixel art di fine partita da condividere o scaricare.
+
 ### Schermate
-- Home: scelta dello sport, personalizzazione, classifica, impostazioni. Sullo sfondo l'atleta animato con ora e meteo live.
+- Home: scelta dello sport, BOB / BOBBA, gioca, sfida del giorno, missioni, personalizzazione, classifica, impostazioni. Sullo sfondo l'atleta animato con ora e meteo live.
 - Personalizzazione, tutto sbloccato da subito:
   - Atleta: M/F, tono pelle (almeno 6), capelli (stile + colore), muta/lycra (2 colori), casco, occhiali, harness.
   - Attrezzatura: tavola (colore + grafica), kite, wing, foil (colori + pattern).
-  - Anteprima animata live e pulsante "casuale". Ogni sport ricorda la propria configurazione.
+  - Anteprima animata live e pulsante "casuale". Ogni sport ricorda la propria configurazione di muta e attrezzatura; il corpo (pelle, capelli, casco, occhiali) è condiviso tra gli sport (modifica approvata dall'utente).
+  - In più del catalogo base, 12 colori speciali si sbloccano con le missioni (aggiunta approvata dall'utente): il catalogo base resta tutto sbloccato da subito.
   - Salvataggio in localStorage dentro try/catch: il gioco deve funzionare anche se il salvataggio fallisce.
 - Game over: punteggio, record personale, invio in classifica con nickname, restart con un tap.
 - Lingue: EN di default, IT e PT. Tutte le stringhe in un unico file.

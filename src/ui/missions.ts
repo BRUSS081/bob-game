@@ -45,19 +45,29 @@ export class MissionsScreen implements Screen {
 
   render(): void {
     const { r, missions } = this.ctx;
-    const { W, H, u } = r;
+    const { W, H } = r;
     const margin = 6;
     r.backdrop(this.clock * 30);
     r.surfaceFront(this.clock * 30);
 
-    const lineH = (GLYPH_H + 5) * u;
+    // full UI scale when it fits, smaller on short screens
+    let u = r.u;
+    let lineH = 0;
+    let w = 0;
+    let cell = 0;
+    let h = 0;
+    let buttonH = 0;
+    for (;;) {
+      lineH = (GLYPH_H + 5) * u;
+      w = Math.min(W - 2 * margin, r.font.widthOf(23, u) + 26 * u);
+      // three missions, the collection (two rows of six swatches), the title and the button
+      cell = Math.min(Math.floor((w - 8 * u) / 6), 18 * u);
+      h = lineH * 2 + 3 * (lineH + 2 * u) + 2 * cell + 10 * u;
+      buttonH = (GLYPH_H + 7) * u;
+      if (u === 1 || h + buttonH + 4 * u + 2 * margin <= H) break;
+      u = 1;
+    }
     const sw = 12 * u;
-    const textW = r.font.widthOf(23, u);
-    const w = Math.min(W - 2 * margin, textW + sw + 14 * u);
-    // three missions, the collection (two rows of six swatches), the title and the button
-    const cell = Math.min(Math.floor((w - 8 * u) / 6), 18 * u);
-    const h = lineH * 2 + 3 * (lineH + 2 * u) + 2 * cell + 10 * u;
-    const buttonH = (GLYPH_H + 7) * u;
     const x = Math.round((W - w) / 2);
     let y = Math.max(margin, Math.round((H - h - buttonH - 4 * u) / 2));
     r.panel(setRect(this.panel, x, y, w, h));

@@ -135,12 +135,11 @@ export class HomeScreen implements Screen {
     const top = margin + (GLYPH_H + 4) * u;
     let title = 4 * u;
     let gap = 4 * u;
-    const blockH = () => GLYPH_H * title + 3 * gap + ROWS * (rowH + gap);
     // shrink the title, then the gaps, until the menu fits above the sea (or at least on screen)
-    if (blockH() > seaY - top - 4) title = 3 * u;
-    if (blockH() > H - top - margin) title = 2 * u;
-    if (blockH() > H - top - margin) gap = 2 * u;
-    const block = blockH();
+    if (menuHeight(title, gap, rowH) > seaY - top - 4) title = 3 * u;
+    if (menuHeight(title, gap, rowH) > H - top - margin) title = 2 * u;
+    if (menuHeight(title, gap, rowH) > H - top - margin) gap = 2 * u;
+    const block = menuHeight(title, gap, rowH);
     const cx = landscape ? Math.round(W * 0.64) : Math.round(W / 2);
     let y = Math.max(top, Math.min(Math.round((seaY - block) / 2), H - block - margin));
 
@@ -179,3 +178,7 @@ export class HomeScreen implements Screen {
 }
 
 const scratch = newRect();
+
+function menuHeight(title: number, gap: number, rowH: number): number {
+  return GLYPH_H * title + 3 * gap + ROWS * (rowH + gap);
+}

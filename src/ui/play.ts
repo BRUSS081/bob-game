@@ -482,10 +482,11 @@ export class PlayScreen implements Screen {
         const newBest = this.daily ? this.newDailyBest : g.newBest;
         const missions = this.runMissions.length > 0;
         // a smaller title when the screen is short
-        let title = 2 * u;
-        const blockH = () => (GLYPH_H + 3) * title + textH + u + (GLYPH_H + 4) * 2 * u + (newBest ? textH : 0) + (this.daily ? textH : 0) + (missions ? textH + 2 * u : 0) + 2 * u + (GLYPH_H + 7) * u;
-        if (blockH() > r.H - row2 - lineH - margin) title = u;
-        let oy = Math.max(row2 + lineH, Math.min(mid - 36 * u, r.H - margin - blockH()));
+        // everything but the title, then the title at 2u, or at u when the screen is short
+        const rest = textH + u + (GLYPH_H + 4) * 2 * u + (newBest ? textH : 0) + (this.daily ? textH : 0) + (missions ? textH + 2 * u : 0) + 2 * u + (GLYPH_H + 7) * u;
+        const title = (GLYPH_H + 3) * 2 * u + rest > r.H - row2 - lineH - margin ? u : 2 * u;
+        const blockH = (GLYPH_H + 3) * title + rest;
+        let oy = Math.max(row2 + lineH, Math.min(mid - 36 * u, r.H - margin - blockH));
         oy += r.centered(t.wipeout, W / 2, oy, C.white, title);
         const who = WHO[this.ctx.profile.rider][g.sport];
         oy += r.centered(who, W / 2, oy, C.skyPale, u) + u;

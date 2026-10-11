@@ -28,7 +28,7 @@ export const SURF = {
   maxGapTimeStart: 1.9,
   maxGapTimeEnd: 1.2,
   /** Distance before the first obstacle. */
-  firstGap: 320,
+  firstGap: 180,
   /** Forgiveness: hitboxes shrink by this much on each side. */
   hitboxInset: 2,
 
@@ -92,7 +92,7 @@ export const KITE = {
   minGapTime: 1.15,
   maxGapTimeStart: 2.3,
   maxGapTimeEnd: 1.6,
-  firstGap: 380,
+  firstGap: 240,
   /** Wind gust power-up: mega jump, untouchable until landing. */
   gustVelocity: 380,
 } as const;
@@ -123,7 +123,7 @@ export const WING = {
   minGapTime: 0.8,
   maxGapTimeStart: 1.9,
   maxGapTimeEnd: 1.25,
-  firstGap: 340,
+  firstGap: 200,
   /** Wind gust power-up: faster, higher breach limit, untouchable. */
   gustTime: 5,
   gustSpeed: 1.25,
@@ -140,7 +140,35 @@ export const SCORING = {
   maxMultiplier: 5,
   /** Points factor while the perfect wave is active. */
   powerFactor: 2,
+  /** Passing an obstacle this close (px) without touching it. */
+  nearMissDistance: 4,
+  nearMissPoints: 25,
+  /** Jumping while the dolphins jump next to you. */
+  dolphinPoints: 150,
 } as const;
+
+/**
+ * Wing foil flow: flying just under the breach limit fills a meter that
+ * multiplies distance points, up to maxFactor. Falls back when you leave the band.
+ */
+export const FLOW = {
+  band: 6,
+  rise: 0.45,
+  fall: 0.7,
+  maxFactor: 3,
+} as const;
+
+/**
+ * Where obstacles appear, in game pixels from the left edge: past the widest
+ * view, the same on every screen, so a seed always plays the same run.
+ */
+export const SPAWN_X = 648;
+
+/**
+ * Speed ramp: faster at the start, gentler near the top speed. The factor
+ * goes from 1 + earlyBoost at the start speed to 1 - earlyBoost at the top.
+ */
+export const EARLY_BOOST = 0.6;
 
 /** Height of the water band below the surface line, in game pixels. */
 export const SEA_DEPTH = 58;

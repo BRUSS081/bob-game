@@ -27,6 +27,8 @@ export const STRINGS = {
     newBest: 'NEW BEST!',
     power: { wave: 'PERFECT WAVE', gust: 'WIND GUST' },
     spins: 'SPINS',
+    popups: { close: 'CLOSE!', over: 'OVER!', dolphin: 'DOLPHINS!' },
+    flow: 'FLOW',
     labels: {
       character: 'RIDER',
       skin: 'SKIN',

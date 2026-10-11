@@ -1,10 +1,11 @@
 import type { Display } from '../core/display.ts';
 import type { AthleteState } from '../game/athletes.ts';
 import { KITE } from '../game/config.ts';
+import { DOLPHIN_COUNT, type Dolphins } from '../game/dolphins.ts';
 import type { Obstacle, ObstacleName } from '../game/obstacles.ts';
 import type { SportId } from '../game/sport.ts';
 import { ANCHOR_X, ANCHOR_Y, FRAME_H, FRAME_W, type FrameName } from '../sprites/compose.ts';
-import { powerRaster, propRasters } from '../sprites/props.ts';
+import { dolphinRasters, powerRaster, propRasters } from '../sprites/props.ts';
 import type { Ramp } from '../sprites/ramps.ts';
 import type { Raster } from '../sprites/raster.ts';
 import { SPIN_STEPS, type AthleteSprites } from '../sprites/sheet.ts';
@@ -98,6 +99,7 @@ export class Renderer {
   private readonly props = new Map<ObstacleName, HTMLCanvasElement[]>();
   private readonly powers: Record<'wave' | 'gust', HTMLCanvasElement | null> = { wave: null, gust: null };
   private readonly swatches = new Map<Ramp, [string, string, string]>();
+  private dolphinCanvases: HTMLCanvasElement[] | null = null;
 
   constructor(display: Display) {
     this.display = display;
@@ -241,11 +243,14 @@ export class Renderer {
       const k = o.kind;
       const x = Math.round(lerp(o.prevX, o.x, alpha));
       if ((k.name === 'rival' || k.name === 'kiter') && rivals.length > 0) {
+        // rivals hop once far ahead: their altitude is the obstacle's
         const set = rivals[i % rivals.length];
-        const frame = set.frames[RIDE[(Math.floor(clock * 7) + i) % 4]];
+        const alt = Math.round(o.y);
+        const frame = alt > 0 ? set.frames.air : set.frames[RIDE[(Math.floor(clock * 7) + i) % 4]];
         const dx = x + Math.round(k.w / 2) - ANCHOR_X;
-        if (k.name === 'kiter' && set.kite.length > 0) this.kite(set, x, 0, seaY, clock + i * 0.37, dx, seaY - ANCHOR_Y, false);
-        this.ctx.drawImage(frame, dx, seaY - ANCHOR_Y);
+        const dy = seaY - alt - ANCHOR_Y;
+        if (k.name === 'kiter' && set.kite.length > 0) this.kite(set, x, alt, seaY, clock + i * 0.37, dx, dy, false);
+        this.ctx.drawImage(frame, dx, dy);
         continue;
       }
       const list = this.propCanvases(k.name);
@@ -255,6 +260,28 @@ export class Renderer {
       }
       const img = list.length > 1 ? list[(Math.floor(clock * 6) + i) % list.length] : list[0];
       this.ctx.drawImage(img, x, seaY - Math.round(o.y) - k.h);
+    }
+  }
+
+  /** The dolphin pod, drawn around the athlete (positions are relative to it). */
+  dolphins(d: Dolphins, playerX: number): void {
+    if (!d.active) return;
+    let list = this.dolphinCanvases;
+    if (!list) {
+      list = dolphinRasters().map(rasterCanvas);
+      this.dolphinCanvases = list;
+    }
+    const size = list[0].width;
+    for (let i = 0; i < DOLPHIN_COUNT; i++) {
+      const x = Math.round(playerX + d.offset(i));
+      if (x < -size || x > this.W) continue;
+      const pose = d.pose(i);
+      if (pose < 0) {
+        this.ctx.drawImage(list[3], x + 8, this.seaY - 3);
+      } else {
+        const alt = Math.round(d.altitude(i));
+        this.ctx.drawImage(list[pose], x, this.seaY - alt - Math.round(size * 0.7));
+      }
     }
   }
 

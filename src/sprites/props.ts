@@ -152,6 +152,49 @@ function gull(frame: number): Raster {
   return outlineInk(fromSprite(rows, { s: C.grey, w: C.white, o: C.orange }));
 }
 
+const DOLPHIN_ROWS = [
+  '..........dd..........',
+  '.........ddd..........',
+  '.......ddddddddd......',
+  'd....dddddddddddddd...',
+  'dd.ddddddddddddddkddd.',
+  '.dddddbbbbbbbbbbbbbddd',
+  'dd..dbbbbbbbbbbbbbb...',
+  'd......bbbb..bbb......',
+  '........bb............',
+];
+
+/** Nearest-neighbor rotation around the center, on a canvas big enough for any angle. */
+function rotated(src: Raster, angle: number): Raster {
+  const size = Math.ceil(Math.hypot(src.w, src.h)) + 2;
+  const out = new Raster(size, size);
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  const cx = src.w / 2;
+  const cy = src.h / 2;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const dx = x + 0.5 - size / 2;
+      const dy = y + 0.5 - size / 2;
+      const sx = Math.floor(cos * dx + sin * dy + cx);
+      const sy = Math.floor(-sin * dx + cos * dy + cy);
+      if (sx >= 0 && sy >= 0 && sx < src.w && sy < src.h) out.px[y * size + x] = src.px[sy * src.w + sx];
+    }
+  }
+  return out;
+}
+
+/**
+ * Dolphin poses, all on the same square canvas: rising (nose up), top
+ * of the jump, diving; then the dorsal fin cutting the surface.
+ */
+export function dolphinRasters(): Raster[] {
+  const body = fromSprite(DOLPHIN_ROWS, { d: C.slate, b: C.silver, k: C.ink });
+  const poses = [rotated(body, -0.45), rotated(body, 0), rotated(body, 0.45)].map(outlineInk);
+  const fin = fromSprite(['..d..', '.dd..', 'ddd..', 'wwwww'], { d: C.slate, w: C.white });
+  return [...poses, outlineInk(fin)];
+}
+
 /** Obstacle sprites by name. Gulls have two frames; the rest one. */
 export function propRasters(name: ObstacleName): Raster[] {
   switch (name) {

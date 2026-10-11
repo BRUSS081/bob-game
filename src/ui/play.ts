@@ -2,7 +2,7 @@ import { Rng } from '../core/rng.ts';
 import { isGameKey } from '../core/input.ts';
 import { CHARACTERS, defaultConfig, randomize, type CharacterId } from '../custom/athlete.ts';
 import { WING } from '../game/config.ts';
-import { Game } from '../game/game.ts';
+import { Game, POPUP_TIME } from '../game/game.ts';
 import { nextMultiplier } from '../game/score.ts';
 import { SPORTS, type SportId } from '../game/sport.ts';
 import { t } from '../i18n/strings.ts';
@@ -51,15 +51,10 @@ export class PlayScreen implements Screen {
     return this.game;
   }
 
-  setViewWidth(width: number): void {
-    for (const sport of SPORTS) this.games[sport].setViewWidth(width);
-  }
-
   enter(): void {
     const sport = this.ctx.profile.sport;
     this.game = this.games[sport];
     this.game.best = Math.max(this.game.best, this.ctx.profile.best[sport]);
-    this.game.setViewWidth(this.ctx.r.W || 480);
     this.prepareRivals(sport);
     this.newRun();
     this.game.start();
@@ -142,11 +137,11 @@ export class PlayScreen implements Screen {
     const sport = g.sport;
     const cfg = g.cfg;
     const distance = lerp(g.prevDistance, g.distance, alpha);
-    g.setViewWidth(r.W);
 
     r.backdrop(distance);
     if (g.perfectWave > 0) r.perfectWave(cfg.playerX, g.perfectWave < 1 && Math.floor(g.clock * 8) % 2 === 0);
     if (g.gustTime > 0 || g.gustJump) r.windLines(g.clock);
+    r.dolphins(g.dolphins, cfg.playerX);
     r.obstacles(g.obstacles.items, alpha, g.clock, this.rivals);
     const p = g.power;
     if (p.active) r.powerUp(p.kind, lerp(p.prevX, p.x, alpha), p.y, g.clock);
@@ -176,17 +171,41 @@ export class PlayScreen implements Screen {
       r.text('x', W - margin - 2 * adv + u, row2, C.gold, u);
       r.number(nextMultiplier(g.score), 1, W - margin - adv + u, row2, C.gold, u);
     }
-    if (g.popupTime > 0) {
-      const rise = Math.round((0.9 - g.popupTime) * 20);
-      const y = seaY - Math.round(g.athlete.y) - g.cfg.playerH - 14 - GLYPH_H * u - rise;
+    // "+points" labels rising over the athlete; older ones sit above newer ones
+    const base = seaY - Math.round(g.athlete.y) - g.cfg.playerH - 14 - GLYPH_H * u;
+    for (let i = 0; i < g.popups.length; i++) {
+      const q = g.popups[i];
+      if (!q.active) continue;
+      let newer = 0;
+      for (let j = 0; j < g.popups.length; j++) if (g.popups[j].active && g.popups[j].time > q.time) newer++;
+      const y = base - Math.round((POPUP_TIME - q.time) * 20) - newer * lineH;
       const x = g.cfg.playerX;
-      r.text('+', x, y, C.gold, u);
-      r.number(g.popupPoints, digitCount(g.popupPoints), x + adv, y, C.gold, u);
-      if (g.popupSpins > 1) {
-        r.text('x', x, y - lineH, C.sun, u);
-        r.number(g.popupSpins, 1, x + adv, y - lineH, C.sun, u);
-        r.text(t.spins, x + 3 * adv, y - lineH, C.sun, u);
+      const color = q.kind === 'trick' ? C.gold : q.kind === 'dolphin' ? C.sun : C.white;
+      const digits = digitCount(q.points);
+      r.text('+', x, y, color, u);
+      r.number(q.points, digits, x + adv, y, color, u);
+      const after = x + (digits + 2) * adv;
+      if (q.kind === 'trick' && q.spins > 1) {
+        r.text('x', after, y, C.sun, u);
+        r.number(q.spins, 1, after + adv, y, C.sun, u);
+        r.text(t.spins, after + 3 * adv, y, C.sun, u);
+      } else if (q.kind !== 'trick') {
+        r.text(t.popups[q.kind], after, y, color, u);
       }
+    }
+
+    // wing foil flow meter, next to the pause button
+    if (g.sport === 'wing' && g.phase === 'running') {
+      const fx = margin + size + 6 * u;
+      const fy = margin + Math.round((size - GLYPH_H * u) / 2);
+      const full = g.flow >= 1;
+      r.text(t.flow, fx, fy, full ? C.sun : C.white, u);
+      const bx = fx + r.font.width(t.flow, u) + 3 * u;
+      const bw = 40 * u;
+      r.fill(C.navy, bx, fy, bw + 2, GLYPH_H * u);
+      r.fill(full && Math.floor(g.clock * 8) % 2 === 0 ? C.white : full ? C.sun : C.aqua, bx + 1, fy + 1, Math.round(g.flow * bw), GLYPH_H * u - 2);
+      // ticks at x2 and x3
+      r.fill(C.ink, bx + 1 + Math.round(bw / 2), fy, 1, GLYPH_H * u);
     }
 
     // power-up label and time bar

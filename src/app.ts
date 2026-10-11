@@ -37,8 +37,6 @@ export class App implements Context {
     this.play = new PlayScreen(this);
     this.screens = { home: new HomeScreen(this), customize: new CustomizeScreen(this), game: this.play };
     this.screen = this.screens.home;
-    this.play.setViewWidth(display.layout.width);
-    display.onResize((layout) => this.play.setViewWidth(layout.width));
     this.screen.enter();
   }
 

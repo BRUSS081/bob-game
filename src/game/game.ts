@@ -1,9 +1,10 @@
 import { Rng } from '../core/rng.ts';
 import { AIR, KiteAthlete, SURFACE, WingAthlete, createAthlete, newBoxes, type Athlete } from './athletes.ts';
 import { overlaps } from './collision.ts';
-import { KITE, SURF, WING, type RunConfig } from './config.ts';
+import { EARLY_BOOST, FLOW, KITE, SCORING, SPAWN_X, SURF, WING, type RunConfig } from './config.ts';
+import { Dolphins } from './dolphins.ts';
 import { Obstacles, obstaclesFor } from './obstacles.ts';
-import { addDistance, createScore, landPlain, landTrick, resetScore, total } from './score.ts';
+import { addBonus, addDistance, createScore, landPlain, landTrick, resetScore, total } from './score.ts';
 import type { SportId } from './sport.ts';
 
 export type Phase = 'ready' | 'running' | 'paused' | 'over';
@@ -16,6 +17,44 @@ export interface PowerUp {
   prevX: number;
   /** Altitude of the bottom edge above the surface. */
   y: number;
+}
+
+export type PopupKind = 'trick' | 'close' | 'over' | 'dolphin';
+
+/** A short "+points" label rising over the athlete. */
+export interface Popup {
+  active: boolean;
+  kind: PopupKind;
+  points: number;
+  spins: number;
+  /** Seconds left. */
+  time: number;
+}
+
+export const POPUP_TIME = 0.9;
+const POPUPS = 4;
+/** Altitude above which a wing foiler counts as jumping with the dolphins. */
+const WING_JUMP_ALTITUDE = 12;
+
+/** What happened in a run, for missions and the wipeout screen. */
+export interface RunStats {
+  tricks: number;
+  bestCombo: number;
+  maxSpins: number;
+  closeCalls: number;
+  overs: number;
+  powerUps: number;
+  /** Highest wing foil flow reached, 0..1. */
+  maxFlow: number;
+  dolphins: number;
+}
+
+export function newStats(): RunStats {
+  return { tricks: 0, bestCombo: 0, maxSpins: 0, closeCalls: 0, overs: 0, powerUps: 0, maxFlow: 0, dolphins: 0 };
+}
+
+function clearStats(s: RunStats): void {
+  s.tricks = s.bestCombo = s.maxSpins = s.closeCalls = s.overs = s.powerUps = s.maxFlow = s.dolphins = 0;
 }
 
 export interface GameEvents {
@@ -72,18 +111,22 @@ export class Game {
   gustJump = false;
   /** Seconds of protection after a power-up ended. */
   grace = 0;
-  /** Last trick points and spins, shown for a moment. */
-  popupPoints = 0;
-  popupSpins = 0;
-  popupTime = 0;
+  /** Wing foil flow meter, 0..1. */
+  flow = 0;
+  /** Seed of the current run (daily challenges replay the same one). */
+  seed = 0;
+  readonly popups: Popup[] = [];
+  readonly stats: RunStats = newStats();
+  readonly dolphins = new Dolphins();
 
   readonly obstacles: Obstacles;
   readonly power: PowerUp = { active: false, kind: 'wave', x: 0, prevX: 0, y: 0 };
   readonly score = createScore();
 
-  private viewWidth = 480;
   private sincePower = 0;
   private readonly rng = new Rng(1);
+  /** Separate stream for harmless events, so they never change the obstacles. */
+  private readonly eventRng = new Rng(1);
   private readonly events: GameEvents;
   private readonly boxes = newBoxes();
   private readonly powerUps: boolean;
@@ -96,10 +139,12 @@ export class Game {
     this.best = best;
     this.events = events;
     this.powerUps = options.powerUps ?? true;
+    for (let i = 0; i < POPUPS; i++) this.popups.push({ active: false, kind: 'trick', points: 0, spins: 0, time: 0 });
   }
 
-  setViewWidth(width: number): void {
-    this.viewWidth = width;
+  /** Wing foil distance multiplier from the flow meter. */
+  get flowFactor(): number {
+    return 1 + (FLOW.maxFactor - 1) * this.flow;
   }
 
   get points(): number {
@@ -125,7 +170,9 @@ export class Game {
 
   start(seed = (Math.random() * 0x7fffffff) | 0): void {
     this.phase = 'running';
+    this.seed = seed;
     this.rng.seed(seed);
+    this.eventRng.seed(seed ^ 0x5bd1e995);
     this.speed = this.effectiveSpeed = this.cfg.startSpeed;
     this.distance = this.prevDistance = 0;
     this.time = 0;
@@ -134,8 +181,11 @@ export class Game {
     this.gustTime = 0;
     this.gustJump = false;
     this.grace = 0;
-    this.popupTime = 0;
+    this.flow = 0;
     this.sincePower = 0;
+    for (let i = 0; i < this.popups.length; i++) this.popups[i].active = false;
+    clearStats(this.stats);
+    this.dolphins.reset(this.eventRng);
     this.power.active = false;
     this.athlete.reset();
     resetScore(this.score);
@@ -169,8 +219,11 @@ export class Game {
     const cfg = this.cfg;
     const a = this.athlete;
     this.time += dt;
-    this.speed = Math.min(cfg.maxSpeed, this.speed + cfg.acceleration * dt);
+    const progress = (this.speed - cfg.startSpeed) / (cfg.maxSpeed - cfg.startSpeed);
+    const accel = cfg.acceleration * (1 + EARLY_BOOST * (1 - 2 * Math.min(1, Math.max(0, progress))));
+    this.speed = Math.min(cfg.maxSpeed, this.speed + accel * dt);
     this.tickPowers(dt);
+    this.tickPopups(dt);
 
     let factor = a.speedFactor;
     if (this.gustTime > 0) factor *= WING.gustSpeed;
@@ -179,20 +232,22 @@ export class Game {
     this.prevDistance = this.distance;
     this.distance += dx;
     const boosted = this.boosted;
-    addDistance(this.score, dx, boosted);
-    if (this.popupTime > 0) this.popupTime = Math.max(0, this.popupTime - dt);
+    addDistance(this.score, dx, boosted, this.flowFactor);
 
     if (a instanceof WingAthlete) a.breachLimit = this.gustTime > 0 ? WING.gustBreach : WING.breach;
     switch (a.update(dt, pressed, held)) {
       case 'jump':
         this.events.onJump?.();
         break;
-      case 'trick':
-        this.popupSpins = a.spins;
-        this.popupPoints = landTrick(this.score, boosted, a.spins);
-        this.popupTime = 0.9;
+      case 'trick': {
+        const st = this.stats;
+        this.popup('trick', landTrick(this.score, boosted, a.spins), a.spins);
+        st.tricks++;
+        st.bestCombo = Math.max(st.bestCombo, this.score.combo);
+        st.maxSpins = Math.max(st.maxSpins, a.spins);
         this.endGustJump();
         break;
+      }
       case 'land':
         landPlain(this.score);
         this.endGustJump();
@@ -210,7 +265,10 @@ export class Game {
         break;
     }
 
-    const spawn = this.obstacles.update(dt, this.effectiveSpeed, this.viewWidth + 8, cfg.playerX, this.rng, cfg);
+    if (a instanceof WingAthlete) this.tickFlow(a, dt);
+    this.dolphins.update(dt, this.eventRng);
+
+    const spawn = this.obstacles.update(dt, this.effectiveSpeed, SPAWN_X, cfg.playerX, this.rng, cfg);
     this.updatePower(dt, dx, spawn.spawned, spawn.groupEnd, spawn.gap);
 
     const n = a.boxes(cfg.playerX, this.boxes);
@@ -231,6 +289,8 @@ export class Game {
         }
       }
     }
+    this.scorePasses(n);
+    this.dolphinBonus(boosted);
     const p = this.power;
     if (p.active) {
       for (let b = 0; b < n; b++) {
@@ -243,6 +303,102 @@ export class Game {
         }
       }
     }
+  }
+
+  private popup(kind: PopupKind, points: number, spins = 0): void {
+    // reuse a free slot, or the oldest one
+    let slot = this.popups[0];
+    for (let i = 0; i < this.popups.length; i++) {
+      const q = this.popups[i];
+      if (!q.active) {
+        slot = q;
+        break;
+      }
+      if (q.time < slot.time) slot = q;
+    }
+    slot.active = true;
+    slot.kind = kind;
+    slot.points = points;
+    slot.spins = spins;
+    slot.time = POPUP_TIME;
+  }
+
+  private tickPopups(dt: number): void {
+    for (let i = 0; i < this.popups.length; i++) {
+      const q = this.popups[i];
+      if (!q.active) continue;
+      q.time -= dt;
+      if (q.time <= 0) q.active = false;
+    }
+  }
+
+  private tickFlow(a: WingAthlete, dt: number): void {
+    const inBand = a.state === 'ride' && !a.touching && a.y >= a.breachLimit - FLOW.band;
+    this.flow = inBand ? Math.min(1, this.flow + FLOW.rise * dt) : Math.max(0, this.flow - FLOW.fall * dt);
+    if (this.flow > this.stats.maxFlow) this.stats.maxFlow = this.flow;
+  }
+
+  /**
+   * Near misses and rivals jumped: while an obstacle passes the athlete,
+   * remember the smallest gap to the hitboxes it could hit; once it is
+   * behind, score it. Surf and kite count only while in the air, so riding
+   * under a gull is not a free bonus.
+   */
+  private scorePasses(n: number): void {
+    const cfg = this.cfg;
+    const a = this.athlete;
+    const flying = a.state === 'air' || a.sport === 'wing';
+    const inset = cfg.hitboxInset;
+    const items = this.obstacles.items;
+    for (let i = 0; i < items.length; i++) {
+      const o = items[i];
+      if (!o.active || o.passed) continue;
+      const k = o.kind;
+      const ox = o.x + inset;
+      const ow = k.w - 2 * inset;
+      const top = o.y + k.h - 1;
+      if (flying) {
+        for (let b = 0; b < n; b++) {
+          const box = this.boxes[b];
+          if ((box.layers & k.layer) === 0 || box.x >= ox + ow || box.x + box.w <= ox) continue;
+          let gap = 0;
+          if (box.y >= top) {
+            gap = box.y - top;
+            o.over = true;
+          } else if (box.y + box.h <= o.y) {
+            gap = o.y - (box.y + box.h);
+          }
+          if (gap < o.closest) o.closest = gap;
+        }
+      }
+      if (o.x + k.w >= cfg.playerX) continue;
+      o.passed = true;
+      if (this.invulnerable) continue;
+      if (k.bonus > 0 && o.over) {
+        addBonus(this.score, k.bonus);
+        this.popup('over', k.bonus);
+        this.stats.overs++;
+      }
+      if (o.closest <= SCORING.nearMissDistance) {
+        addBonus(this.score, SCORING.nearMissPoints);
+        this.popup('close', SCORING.nearMissPoints);
+        this.stats.closeCalls++;
+      }
+    }
+  }
+
+  /** Jumping while a dolphin jumps next to you, once per pod. */
+  private dolphinBonus(boosted: boolean): void {
+    const d = this.dolphins;
+    if (!d.active || d.scored) return;
+    const a = this.athlete;
+    const jumping = a.state === 'air' || (a instanceof WingAthlete && a.y >= WING_JUMP_ALTITUDE);
+    if (!jumping || !d.jumpingNear(70)) return;
+    d.scored = true;
+    const points = SCORING.dolphinPoints * (boosted ? SCORING.powerFactor : 1);
+    addBonus(this.score, points);
+    this.popup('dolphin', points);
+    this.stats.dolphins++;
   }
 
   private tickPowers(dt: number): void {
@@ -260,6 +416,7 @@ export class Game {
   }
 
   private collect(kind: PowerKind): void {
+    this.stats.powerUps++;
     if (kind === 'wave') {
       this.perfectWave = this.cfg.perfectWaveTime;
     } else if (this.athlete instanceof KiteAthlete) {

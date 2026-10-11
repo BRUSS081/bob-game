@@ -22,8 +22,14 @@ export function resetScore(s: Score): void {
   s.combo = 0;
 }
 
-export function addDistance(s: Score, px: number, boosted: boolean): void {
-  s.distancePoints += px * SCORING.pointsPerPx * (boosted ? SCORING.powerFactor : 1);
+/** Distance points; `factor` is an extra multiplier (wing foil flow). */
+export function addDistance(s: Score, px: number, boosted: boolean, factor = 1): void {
+  s.distancePoints += px * SCORING.pointsPerPx * (boosted ? SCORING.powerFactor : 1) * factor;
+}
+
+/** Bonus points (near misses, rivals, dolphins): they do not touch the combo. */
+export function addBonus(s: Score, points: number): void {
+  s.trickPoints += points;
 }
 
 /** Current multiplier for the next clean trick. */

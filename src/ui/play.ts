@@ -17,10 +17,15 @@ import { C } from '../render/palette.ts';
 import { HORIZON_ABOVE_SEA, inside, lerp, newRect, setRect, type PoseView } from '../render/renderer.ts';
 import { GEAR_COLORS } from '../sprites/ramps.ts';
 import type { AthleteSprites } from '../sprites/sheet.ts';
+import { sharePostcard } from './postcard.ts';
 import type { Context, Screen } from './screen.ts';
+import { Tutorial } from './tutorial.ts';
 
-/** Seconds the sport hints stay on screen at the start of a run. */
-const HINT_TIME = 4;
+/** Freeze frame and screen shake when wiping out. */
+const HIT_STOP = 0.08;
+const SHAKE_TIME = 0.35;
+/** Seconds the combo multiplier pulses after it grows. */
+const COMBO_FLASH = 0.6;
 /** Random rival looks prepared per sport; each run shows two of them. */
 const RIVAL_LOOKS = 4;
 /** Seconds the mission banner stays up. */
@@ -58,6 +63,14 @@ export class PlayScreen implements Screen {
   private readonly runMissions: Mission[] = [];
   private banner: Mission | null = null;
   private bannerTime = 0;
+  private readonly tutorial = new Tutorial();
+  private hitStop = 0;
+  private shake = 0;
+  private frame = 0;
+  private comboFlash = 0;
+  private lastCombo = 0;
+  private sharing = false;
+  private readonly shareRect = newRect();
   private readonly games = {} as Record<SportId, Game>;
   private readonly rivalPool = {} as Record<SportId, AthleteSprites[]>;
   private readonly rivals: AthleteSprites[] = [];
@@ -109,6 +122,13 @@ export class PlayScreen implements Screen {
       this.game.start();
     }
     this.newRun();
+    // first run of a sport: learn the controls by doing, shielded
+    if (!this.daily && !this.ctx.profile.tutorialDone.has(sport)) {
+      this.tutorial.start(sport);
+      this.game.shield = true;
+    } else {
+      this.tutorial.stop();
+    }
     this.lastPhase = this.game.phase;
     this.pressed = false;
   }
@@ -135,6 +155,10 @@ export class PlayScreen implements Screen {
     this.banner = null;
     this.bannerTime = 0;
     this.newDailyBest = false;
+    this.hitStop = 0;
+    this.shake = 0;
+    this.comboFlash = 0;
+    this.lastCombo = 0;
     const pool = this.rivalPool[this.game.sport];
     this.rivals.length = 0;
     if (!pool) return;
@@ -165,6 +189,10 @@ export class PlayScreen implements Screen {
       g.pause();
       return true;
     }
+    if (g.phase === 'over' && g.overTime >= g.cfg.restartDelay && inside(this.shareRect, x, y)) {
+      this.share();
+      return true;
+    }
     if (g.phase === 'paused' || (g.phase === 'over' && g.overTime >= g.cfg.restartDelay)) {
       if (inside(this.rightRect, x, y)) {
         this.home();
@@ -181,8 +209,36 @@ export class PlayScreen implements Screen {
 
   update(dt: number): void {
     const g = this.game;
-    g.update(dt, this.pressed, this.ctx.input.held);
+    if (this.shake > 0) this.shake -= dt;
+    if (this.comboFlash > 0) this.comboFlash -= dt;
+    // freeze frame right after a wipeout
+    if (this.hitStop > 0) {
+      this.hitStop -= dt;
+      this.pressed = false;
+      return;
+    }
+    const held = this.ctx.input.held;
+    let pressed = this.pressed;
     this.pressed = false;
+    if (this.tutorial.active) {
+      const wasFrozen = this.tutorial.frozen;
+      if (!this.tutorial.beforeStep(g, pressed, held)) return;
+      // the press that releases the stop is the jump
+      if (wasFrozen) pressed = true;
+    }
+    g.update(dt, pressed, held);
+    this.tutorial.afterStep(g, dt);
+    if (this.tutorial.step === 'done') {
+      this.tutorial.stop();
+      g.shield = false;
+      this.ctx.profile.finishTutorial(g.sport);
+    }
+    if (g.score.combo > this.lastCombo) this.comboFlash = COMBO_FLASH;
+    this.lastCombo = g.score.combo;
+    if (this.lastPhase === 'running' && g.phase === 'over') {
+      this.hitStop = HIT_STOP;
+      this.shake = SHAKE_TIME;
+    }
     if (this.lastPhase === 'over' && g.phase === 'running') this.newRun();
     if (g.phase === 'running' || (g.phase === 'over' && this.lastPhase === 'running')) {
       this.record();
@@ -221,12 +277,40 @@ export class PlayScreen implements Screen {
     this.ghost.copyFrom(this.recording);
   }
 
+  private share(): void {
+    if (this.sharing) return;
+    const g = this.game;
+    const p = this.ctx.profile;
+    this.sharing = true;
+    sharePostcard(this.ctx.r, {
+      sprites: this.ctx.player(),
+      sport: g.sport,
+      rider: p.rider,
+      points: g.points,
+      stats: g.stats,
+      day: this.daily ? this.dailyRecord.day : '',
+    })
+      .catch(() => {})
+      .finally(() => {
+        this.sharing = false;
+      });
+  }
+
   render(alpha: number): void {
     const { r } = this.ctx;
     const g = this.game;
     const sport = g.sport;
     const cfg = g.cfg;
+    // nothing moves while the tutorial waits or during the freeze frame
+    if (this.tutorial.frozen || this.hitStop > 0) alpha = 1;
     const distance = lerp(g.prevDistance, g.distance, alpha);
+    this.frame++;
+    const shaking = this.shake > 0;
+    if (shaking) {
+      const amp = Math.ceil((3 * this.shake) / SHAKE_TIME);
+      r.ctx.save();
+      r.ctx.translate(((this.frame * 7) % 3) - 1 === 0 ? amp : -amp, ((this.frame * 5) % 3) - 1 === 0 ? -amp : amp);
+    }
 
     r.backdrop(distance);
     if (g.perfectWave > 0) r.perfectWave(cfg.playerX, g.perfectWave < 1 && Math.floor(g.clock * 8) % 2 === 0);
@@ -239,7 +323,38 @@ export class PlayScreen implements Screen {
     const blink = g.grace > 0 && Math.floor(g.clock * 12) % 2 === 1;
     if (!blink) r.athlete(this.ctx.player(), sport, g.athlete, cfg.playerX, alpha, g.clock, 1, r.seaY, cfg.playerW);
     r.surfaceFront(distance);
+    if (shaking) r.ctx.restore();
     this.hud();
+    this.tutorialPrompt();
+  }
+
+  /** The tutorial's big "TAP" or "HOLD" while the game waits, and the flow hint. */
+  private tutorialPrompt(): void {
+    const tut = this.tutorial;
+    if (!tut.frozen && tut.hintTime <= 0) return;
+    const { r } = this.ctx;
+    const u = r.u;
+    const g = this.game;
+    let big: string;
+    let small: string;
+    if (tut.frozen) {
+      const press = r.touch ? t.tutorial.tap : t.tutorial.space;
+      big = tut.step === 'rise' ? t.tutorial.hold : press;
+      small =
+        g.sport === 'wing' ? t.tutorial.wingRise : tut.step === 'jump' ? (g.sport === 'surf' ? t.tutorial.surfJump : t.tutorial.kiteJump) : g.sport === 'surf' ? t.tutorial.surfTrick : t.tutorial.kiteSpin;
+    } else {
+      big = t.tutorial.flow;
+      small = t.tutorial.flowHint;
+    }
+    const bigScale = 3 * u;
+    const w = Math.min(r.W - 8 * u, Math.max(r.font.width(big, bigScale), r.font.width(small, u)) + 12 * u);
+    const h = (GLYPH_H + 3) * bigScale + r.lineHeight(small, u, w - 8 * u) + 6 * u;
+    // in landscape to the right of the athlete, in portrait above it
+    const cx = r.W > r.H ? Math.round((g.cfg.playerX + 80 + r.W) / 2) : Math.round(r.W / 2);
+    const y = Math.max(40 * u, Math.round((r.seaY - HORIZON_ABOVE_SEA) / 2 - h / 2));
+    r.panel(setRect(this.hintRect, cx - w / 2, y, w, h));
+    if (!tut.frozen || Math.floor(g.clock * 4) % 2 === 0) r.centered(big, cx, y + 3 * u, C.sun, bigScale);
+    r.centered(small, cx, y + 3 * u + (GLYPH_H + 3) * bigScale, C.white, u, w - 8 * u);
   }
 
   /** Today's best daily run, translucent, at its distance relative to yours. */
@@ -286,8 +401,12 @@ export class PlayScreen implements Screen {
 
     const row2 = margin + lineH;
     if (g.phase === 'running' && g.score.combo > 0) {
-      r.text('x', W - margin - 2 * adv + u, row2, C.gold, u);
-      r.number(nextMultiplier(g.score), 1, W - margin - adv + u, row2, C.gold, u);
+      // the multiplier pulses bigger for a moment when it grows
+      const cs = this.comboFlash > 0 ? 2 * u : u;
+      const cadv = ADVANCE * cs;
+      const color = this.comboFlash > 0 && Math.floor(this.comboFlash * 10) % 2 === 0 ? C.white : C.gold;
+      r.text('x', W - margin - 2 * cadv + cs, row2, color, cs);
+      r.number(nextMultiplier(g.score), 1, W - margin - cadv + cs, row2, color, cs);
     }
     // "+points" labels rising over the athlete; older ones sit above newer ones
     const base = seaY - Math.round(g.athlete.y) - g.cfg.playerH - 14 - GLYPH_H * u;
@@ -346,25 +465,16 @@ export class PlayScreen implements Screen {
     if (this.bannerTime > 0 && this.banner && g.phase === 'running') this.missionBanner(y + (powerLabel ? 0 : lineH));
     switch (g.phase) {
       case 'running':
-        if (g.time < HINT_TIME && !powerLabel) {
-          // on a panel, so the hints read over the kite and the clouds
-          // in landscape they sit right of the athlete, clear of the kite
-          const hints = t.hints[g.sport];
-          const left = W > r.H ? g.cfg.playerX + 72 : 0;
-          const cx = (left + W) / 2;
-          const maxW = W - left - 16 * u;
-          const h = r.lineHeight(hints[0], u, maxW) + r.lineHeight(hints[1], u, maxW);
-          const w = Math.min(W - left - 8 * u, Math.max(r.font.width(hints[0], u), r.font.width(hints[1], u)) + 8 * u);
-          let hy = Math.max(y + lineH, mid - lineH);
-          r.panel(setRect(this.hintRect, cx - w / 2, hy - 3 * u, w, h + 3 * u));
-          hy += r.centered(hints[0], cx, hy, C.white, u, maxW);
-          r.centered(hints[1], cx, hy, C.sun, u, maxW);
-        }
         break;
       case 'paused': {
-        let py = mid - 20 * u;
-        py += r.centered(t.paused, W / 2, py, C.white, 2 * u) + 4 * u;
+        // the controls of this sport, as a reminder
+        const hints = t.hints[g.sport];
+        let py = Math.max(row2 + lineH, mid - 30 * u);
+        py += r.centered(t.paused, W / 2, py, C.white, 2 * u) + 2 * u;
+        py += r.centered(hints[0], W / 2, py, C.white, u);
+        py += r.centered(hints[1], W / 2, py, C.skyPale, u) + 3 * u;
         this.buttons(py, t.resume);
+        setRect(this.shareRect, 0, 0, 0, 0);
         break;
       }
       case 'over': {
@@ -403,10 +513,11 @@ export class PlayScreen implements Screen {
           oy += textH + 2 * u;
         }
         if (g.overTime >= g.cfg.restartDelay) {
-          this.buttons(oy + 2 * u, t.again);
+          this.buttons(oy + 2 * u, t.again, true);
         } else {
           setRect(this.leftRect, 0, 0, 0, 0);
           setRect(this.rightRect, 0, 0, 0, 0);
+          setRect(this.shareRect, 0, 0, 0, 0);
         }
         break;
       }
@@ -435,15 +546,18 @@ export class PlayScreen implements Screen {
     r.swatch(GEAR_COLORS[m.reward], tx + r.font.width(text, u) + 4 * u, y + 2 * u + (GLYPH_H + 3) * u, sw, GLYPH_H * u);
   }
 
-  /** [primary] [HOME] centered at y. */
-  private buttons(y: number, primary: string): void {
+  /** [primary] [HOME] (and [SHARE] after a run) centered at y. */
+  private buttons(y: number, primary: string, share = false): void {
     const { r } = this.ctx;
     const u = r.u;
     const h = (GLYPH_H + 7) * u;
-    const w = Math.max(r.font.width(primary, u), r.font.width(t.home, u)) + 14 * u;
+    const w = Math.max(r.font.width(primary, u), r.font.width(t.home, u), r.font.width(t.share, u)) + 12 * u;
     const gap = 4 * u;
-    r.button(setRect(this.leftRect, r.W / 2 - gap / 2 - w, y, w, h), primary, 'primary', u);
-    r.button(setRect(this.rightRect, r.W / 2 + gap / 2, y, w, h), t.home, 'normal', u);
+    const total = (share ? 3 : 2) * w + (share ? 2 : 1) * gap;
+    const x = Math.round((r.W - total) / 2);
+    r.button(setRect(this.leftRect, x, y, w, h), primary, 'primary', u);
+    r.button(setRect(this.rightRect, x + w + gap, y, w, h), t.home, 'normal', u);
+    if (share) r.button(setRect(this.shareRect, x + 2 * (w + gap), y, w, h), t.share, 'normal', u);
   }
 }
 

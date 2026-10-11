@@ -111,6 +111,8 @@ export class Game {
   gustJump = false;
   /** Seconds of protection after a power-up ended. */
   grace = 0;
+  /** No wipeouts at all (the first-run tutorial). */
+  shield = false;
   /** Wing foil flow meter, 0..1. */
   flow = 0;
   /** Seed of the current run (daily challenges replay the same one). */
@@ -158,7 +160,7 @@ export class Game {
   }
 
   get invulnerable(): boolean {
-    return this.perfectWave > 0 || this.gustTime > 0 || this.gustJump || this.grace > 0;
+    return this.shield || this.perfectWave > 0 || this.gustTime > 0 || this.gustJump || this.grace > 0;
   }
 
   /** Pauses a running game (tab hidden, window blurred, pause button). */
@@ -183,6 +185,7 @@ export class Game {
     this.gustTime = 0;
     this.gustJump = false;
     this.grace = 0;
+    this.shield = false;
     this.flow = 0;
     this.sincePower = 0;
     for (let i = 0; i < this.popups.length; i++) this.popups[i].active = false;

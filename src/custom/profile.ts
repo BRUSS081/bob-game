@@ -22,6 +22,8 @@ export class Profile {
   rider: CharacterId;
   readonly looks: PerSport<Record<CharacterId, AthleteConfig>>;
   readonly best: PerSport<number>;
+  /** Sports whose first-run tutorial is done. */
+  readonly tutorialDone = new Set<SportId>();
 
   constructor(unlocked: Unlocked = new Set()) {
     const sport = load<unknown>('bob.sport', 'surf');
@@ -40,6 +42,8 @@ export class Profile {
       const b = load<unknown>(`bob.best.${s}`, 0);
       this.best[s] = typeof b === 'number' && Number.isFinite(b) && b > 0 ? Math.floor(b) : 0;
     }
+    const done = load<unknown>('bob.tutorial', []);
+    if (Array.isArray(done)) for (const s of done) if (isSport(s)) this.tutorialDone.add(s);
     // the body is shared: older saves may differ per sport, the current sport wins
     for (const ch of CHARACTERS) this.copyBody(this.sport, ch);
   }
@@ -89,6 +93,11 @@ export class Profile {
 
   saveDaily(sport: SportId, record: DailyRecord): void {
     save(`bob.daily.${sport}`, record);
+  }
+
+  finishTutorial(sport: SportId): void {
+    this.tutorialDone.add(sport);
+    save('bob.tutorial', [...this.tutorialDone]);
   }
 
   setBest(sport: SportId, best: number): void {

@@ -101,7 +101,11 @@ export const STRINGS = {
         sprint: 'SPRINT!',
       },
       swells: {
-        // swells
+        perfect: 'PERFECT!',
+        splash: 'SPLASH',
+        meters: 'M',
+        perfects: 'PERFECT LANDINGS',
+        dark: 'NIGHT FALLS',
       },
       fishing: {
         // fishing

@@ -8,7 +8,7 @@ import { FISH_FRAMES, rodTip } from '../sprites/actor.ts';
 import { ANCHOR_X, ANCHOR_Y } from '../sprites/compose.ts';
 import type { Context } from '../ui/screen.ts';
 import { MiniGame } from './kit.ts';
-import { RARITY_POINTS, isNight, pickCreature, type Creature } from './sealife.ts';
+import { RARITY_POINTS, pickCreature, type Creature } from './sealife.ts';
 
 /** Tuning of fishing. Times in seconds, distances in pixels. */
 export const FISHING = {
@@ -333,7 +333,7 @@ export class FishingScreen extends MiniGame {
 
   protected reset(): void {
     this.seed = (this.rng.next() * 0xffffffff) >>> 0;
-    this.trip.reset(this.seed, this.ctx.r.W, this.floorY - this.surfaceY, isNight());
+    this.trip.reset(this.seed, this.ctx.r.W, this.floorY - this.surfaceY, this.ctx.r.env.night);
     this.castShown = 0;
   }
 
@@ -373,7 +373,7 @@ export class FishingScreen extends MiniGame {
     const surface = this.surfaceY;
     const floor = this.floorY;
     r.seaY = surface;
-    r.backdrop(this.clock * 4, trip.night ? 'night' : 'day');
+    r.backdrop(this.clock * 4);
     underwater(r, surface, floor, this.clock, trip.night);
     specks(r, surface + 6, floor, 0, this.clock);
     seaFloor(r, floor, 0, this.clock, trip.night, this.seed % 1000);

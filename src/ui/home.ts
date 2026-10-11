@@ -35,6 +35,9 @@ export class HomeScreen implements Screen {
   private readonly card = newRect();
   private readonly play = newRect();
   private readonly rider = newRect();
+  private readonly settings = newRect();
+  /** On the top row: 0 the BOB / BOBBA chip, 1 the settings button. */
+  private topCol = 0;
   private readonly bottom: Rect[] = BOTTOM_ITEMS.map(newRect);
   private readonly ctx: Context;
 
@@ -88,13 +91,16 @@ export class HomeScreen implements Screen {
         const step = code === 'ArrowLeft' ? -1 : 1;
         if (this.focus === CAROUSEL || this.focus === PLAY) this.changeGame(step);
         else if (this.focus === BOTTOM) this.col = (this.col + step + BOTTOM_ITEMS.length) % BOTTOM_ITEMS.length;
-        else this.toggleRider();
+        else this.topCol = 1 - this.topCol;
         break;
       }
       case 'Space':
       case 'Enter':
         if (this.focus === BOTTOM) this.openBottom(this.col);
-        else if (this.focus === RIDER) this.toggleRider();
+        else if (this.focus === RIDER) {
+          if (this.topCol === 0) this.toggleRider();
+          else this.ctx.go('settings');
+        }
         else this.launch();
         break;
     }
@@ -105,6 +111,7 @@ export class HomeScreen implements Screen {
     else if (inside(this.next, x, y)) this.changeGame(1);
     else if (inside(this.play, x, y) || inside(this.card, x, y)) this.launch();
     else if (inside(this.rider, x, y)) this.toggleRider();
+    else if (inside(this.settings, x, y)) this.ctx.go('settings');
     else {
       for (let i = 0; i < this.bottom.length; i++) {
         if (inside(this.bottom[i], x, y)) {
@@ -135,12 +142,17 @@ export class HomeScreen implements Screen {
     const athleteX = landscape ? Math.round(W * 0.16) : Math.round(W / 2 - 8);
     r.athlete(this.ctx.player(), sport, demo, athleteX, alpha, this.clock);
     r.surfaceFront(this.distance);
+    r.weatherFront(this.distance);
 
-    // BOB / BOBBA chip, top-left
+    // BOB / BOBBA chip, top-left; settings, top-right
     const chipW = r.font.width(t.characters.bobba, u) + 10 * u;
     const rowH = (GLYPH_H + 7) * u;
-    r.button(setRect(this.rider, margin, margin, chipW, rowH), t.characters[profile.rider], 'selected', u, this.focus === RIDER);
-    this.drawBest(margin);
+    r.button(setRect(this.rider, margin, margin, chipW, rowH), t.characters[profile.rider], 'selected', u, this.focus === RIDER && this.topCol === 0);
+    const gear = setRect(this.settings, W - margin - rowH, margin, rowH, rowH);
+    r.button(gear, '', 'normal', u, this.focus === RIDER && this.topCol === 1);
+    const gearS = Math.max(1, Math.floor((rowH - 2 * u) / ICON));
+    r.icon('sky', gear.x + (rowH - ICON * gearS) / 2, gear.y + (rowH - ICON * gearS) / 2, gearS);
+    this.drawBest(margin, gear.x - 4 * u);
 
     // the block: title, card (arrows, icon, name, tagline, dots), play, bottom row
     const gap = 4 * u;
@@ -211,13 +223,12 @@ export class HomeScreen implements Screen {
   }
 
   /** Best score of the selected game, top-right. */
-  private drawBest(margin: number): void {
+  private drawBest(margin: number, right: number): void {
     const { r, profile } = this.ctx;
     const u = r.u;
     const adv = ADVANCE * u;
     const best = this.game === 'runner' ? profile.best[profile.sport] : profile.gameBest(this.game);
     if (best <= 0 || this.game === 'aquarium') return;
-    const right = r.W - margin;
     let x: number;
     if (LOWER_IS_BETTER.has(this.game)) {
       const cents = Math.round(best * 100);

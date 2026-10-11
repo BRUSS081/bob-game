@@ -6,7 +6,7 @@ import { bubble, seaFloor, specks, underwater } from '../render/sea.ts';
 import { SWIM_SIZE, swimIndex } from '../sprites/actor.ts';
 import type { Context } from '../ui/screen.ts';
 import { MiniGame } from './kit.ts';
-import { RARITY_POINTS, isNight, pickCreature, type Creature } from './sealife.ts';
+import { RARITY_POINTS, pickCreature, type Creature } from './sealife.ts';
 import { treasure, type Treasure } from './treasures.ts';
 
 /** Tuning of the freedive. Pixels, seconds; depth grows downward from the surface (0). */
@@ -335,7 +335,7 @@ export class FreediveScreen extends MiniGame {
   }
 
   protected reset(): void {
-    this.dive.reset((this.rng.next() * 0xffffffff) >>> 0, isNight());
+    this.dive.reset((this.rng.next() * 0xffffffff) >>> 0, this.ctx.r.env.night);
     this.prevX = 0;
     this.prevY = 0;
     this.viewTop = -Math.round(this.ctx.r.H * 0.35);
@@ -408,7 +408,7 @@ export class FreediveScreen extends MiniGame {
     const scroll = wx - this.diverX;
     if (surface > 0) {
       r.seaY = surface;
-      r.backdrop(scroll * 0.5, d.night ? 'night' : 'day');
+      r.backdrop(scroll * 0.5);
     }
     const waterTop = Math.max(0, surface);
     underwater(r, waterTop, r.H, this.clock, d.night, Math.max(0, top) / total, (top + r.H) / total);

@@ -237,6 +237,10 @@ const TRAIL = 24;
 
 export class SlalomScreen extends MiniGame {
   readonly id = 'slalom' as const;
+
+  protected get outdoors(): boolean {
+    return false;
+  }
   private readonly run = new SlalomRun();
   private readonly rng = new Rng(Date.now() >>> 0);
   private prevX = 0;

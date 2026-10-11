@@ -8,7 +8,7 @@ import { SWIM_SIZE, swimIndex } from '../sprites/actor.ts';
 import { creatureRaster } from '../sprites/fish.ts';
 import type { Context } from '../ui/screen.ts';
 import { MiniGame } from './kit.ts';
-import { CREATURES, RARITY_POINTS, isNight, type Creature } from './sealife.ts';
+import { CREATURES, RARITY_POINTS, type Creature } from './sealife.ts';
 
 /** Tuning of the photo safari. Pixels and seconds. */
 export const SNAP = {
@@ -274,7 +274,7 @@ export class SnapScreen extends MiniGame {
 
   protected reset(): void {
     const r = this.ctx.r;
-    this.safari.reset((this.rng.next() * 0xffffffff) >>> 0, r.W, this.waterTop, this.floorY, isNight());
+    this.safari.reset((this.rng.next() * 0xffffffff) >>> 0, r.W, this.waterTop, this.floorY, r.env.night);
     this.showing = 0;
     this.flash = 0;
     this.pendingShot = false;
@@ -320,7 +320,7 @@ export class SnapScreen extends MiniGame {
     const top = this.waterTop;
     const floor = this.floorY;
     r.seaY = top;
-    r.backdrop(this.clock * 3, s.night ? 'night' : 'day');
+    r.backdrop(this.clock * 3);
     underwater(r, top, floor, this.clock, s.night, 0.05, 0.75);
     specks(r, top + 4, floor, 0, this.clock);
     seaFloor(r, floor, this.clock * 2, this.clock, s.night, 3);

@@ -74,6 +74,10 @@ interface Flake {
  */
 export class AquariumScreen extends MiniGame {
   readonly id = 'aquarium' as const;
+
+  protected get outdoors(): boolean {
+    return false;
+  }
   private readonly rng = new Rng(Date.now() >>> 0);
   private readonly fish: Swimmer[] = [];
   private readonly flakes: Flake[] = [];

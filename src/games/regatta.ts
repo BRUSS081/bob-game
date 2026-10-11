@@ -243,6 +243,10 @@ function ahead(a: Boat, b: Boat, markY: number): boolean {
 
 export class RegattaScreen extends MiniGame {
   readonly id = 'regatta' as const;
+
+  protected get outdoors(): boolean {
+    return false;
+  }
   private readonly race = new Race();
   private readonly rng = new Rng(Date.now() >>> 0);
   private looks: AthleteConfig[] = [];

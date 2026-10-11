@@ -2,6 +2,9 @@ import { load, save } from '../core/storage.ts';
 import { isRunMode, type RunMode } from '../game/modes.ts';
 import { SPORTS, isSport, type SportId } from '../game/sport.ts';
 import { isGameId, type GameId } from '../games/registry.ts';
+import type { SkyChoice, WeatherChoice } from '../env/environment.ts';
+import { SKY_NAMES } from '../env/sky.ts';
+import { WEATHER_NAMES } from '../env/weather.ts';
 import { BODY_KEYS, CHARACTERS, defaultConfig, sanitize, type AthleteConfig, type CharacterId, type Unlocked } from './athlete.ts';
 
 type PerSport<T> = Record<SportId, T>;
@@ -32,6 +35,9 @@ export class Profile {
   private readonly tour = new Map<string, number>();
   /** Sports whose first-run tutorial is done. */
   readonly tutorialDone = new Set<SportId>();
+  /** Time of day and weather forced in the settings, or 'auto'. */
+  sky: SkyChoice = 'auto';
+  weather: WeatherChoice = 'auto';
 
   constructor(unlocked: Unlocked = new Set()) {
     const sport = load<unknown>('bob.sport', 'surf');
@@ -59,6 +65,12 @@ export class Profile {
       for (const [id, v] of Object.entries(tour as Record<string, unknown>)) {
         if (typeof v === 'number' && v >= 1 && v <= 3) this.tour.set(id, Math.floor(v));
       }
+    }
+    const settings = load<unknown>('bob.settings', null);
+    if (typeof settings === 'object' && settings !== null) {
+      const s = settings as Record<string, unknown>;
+      if ((SKY_NAMES as readonly unknown[]).includes(s.sky)) this.sky = s.sky as SkyChoice;
+      if ((WEATHER_NAMES as readonly unknown[]).includes(s.weather)) this.weather = s.weather as WeatherChoice;
     }
     const done = load<unknown>('bob.tutorial', []);
     if (Array.isArray(done)) for (const s of done) if (isSport(s)) this.tutorialDone.add(s);
@@ -160,6 +172,12 @@ export class Profile {
   setGameBest(key: string, value: number): void {
     this.bests.set(key, value);
     save(`bob.best.${key}`, value);
+  }
+
+  setSettings(sky: SkyChoice, weather: WeatherChoice): void {
+    this.sky = sky;
+    this.weather = weather;
+    save('bob.settings', { sky, weather });
   }
 
   setBest(sport: SportId, best: number): void {

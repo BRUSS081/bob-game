@@ -90,6 +90,15 @@ export const STRINGS = {
     unknown: '???',
     cm: 'CM',
     seen: 'SEEN',
+    settings: {
+      title: 'SETTINGS',
+      time: 'TIME OF DAY',
+      weather: 'WEATHER',
+      autoSky: 'REAL TIME',
+      autoWeather: 'SURPRISE ME',
+      skies: { dawn: 'DAWN', day: 'DAY', sunset: 'SUNSET', night: 'NIGHT' },
+      weathers: { clear: 'CLEAR', cloudy: 'CLOUDY', rain: 'RAIN', storm: 'STORM', fog: 'FOG' },
+    },
     // words used inside each game (one block per game)
     gameText: {
       sup: {

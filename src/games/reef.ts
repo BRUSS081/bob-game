@@ -275,6 +275,10 @@ export class ReefDefense {
 
 export class ReefScreen extends MiniGame {
   readonly id = 'reef' as const;
+
+  protected get outdoors(): boolean {
+    return false;
+  }
   private readonly field = new ReefDefense();
   private readonly rng = new Rng(Date.now() >>> 0);
   private selected = -1;

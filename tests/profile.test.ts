@@ -74,6 +74,20 @@ describe('profile', () => {
     expect(p.best.wing).toBe(0);
   });
 
+  it('remembers forced time of day and weather, and drops unknown ones', () => {
+    const p = new Profile();
+    expect(p.sky).toBe('auto');
+    expect(p.weather).toBe('auto');
+    p.setSettings('night', 'fog');
+    const q = new Profile();
+    expect(q.sky).toBe('night');
+    expect(q.weather).toBe('fog');
+    storage.setItem('bob.settings', '{"sky":"noon","weather":"snow"}');
+    const z = new Profile();
+    expect(z.sky).toBe('auto');
+    expect(z.weather).toBe('auto');
+  });
+
   it('works when storage throws', () => {
     g.window = {
       get localStorage(): never {
@@ -86,6 +100,7 @@ describe('profile', () => {
       p.setSport('wing');
       p.saveLook();
       p.setBest('wing', 10);
+      p.setSettings('day', 'rain');
     }).not.toThrow();
     expect(p.sport).toBe('wing');
   });

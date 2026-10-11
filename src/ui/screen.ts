@@ -11,7 +11,7 @@ import type { Renderer } from '../render/renderer.ts';
 import type { ActorKind } from '../sprites/actor.ts';
 import type { AthleteSprites } from '../sprites/sheet.ts';
 
-export type ScreenId = 'home' | 'customize' | 'game' | 'missions' | 'album' | 'setup' | 'tour' | MiniGameId;
+export type ScreenId = 'home' | 'customize' | 'game' | 'missions' | 'album' | 'setup' | 'tour' | 'settings' | MiniGameId;
 
 /** What every screen can reach: drawing, saved choices and navigation. */
 export interface Context {

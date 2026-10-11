@@ -16,12 +16,16 @@ import { SPORTS, type SportId } from '../game/sport.ts';
 import { t } from '../i18n/strings.ts';
 import { ADVANCE, GLYPH_H, digitCount } from '../render/font.ts';
 import { C } from '../render/palette.ts';
+import { Particles } from '../render/particles.ts';
 import { HORIZON_ABOVE_SEA, inside, lerp, newRect, setRect, type PoseView, type Sky } from '../render/renderer.ts';
 import { GEAR_COLORS } from '../sprites/ramps.ts';
 import type { AthleteSprites } from '../sprites/sheet.ts';
 import { sharePostcard } from './postcard.ts';
 import type { Context, Screen } from './screen.ts';
 import { Tutorial } from './tutorial.ts';
+
+/** Colors of splashes and spray. */
+const SPRAY = [C.white, C.aqua, C.foamShadow, C.white] as const;
 
 /** Freeze frame and screen shake when wiping out. */
 const HIT_STOP = 0.08;
@@ -70,6 +74,11 @@ export class PlayScreen implements Screen {
   private readonly tutorial = new Tutorial();
   private hitStop = 0;
   private shake = 0;
+  /** Splashes, spray and the wake. */
+  private readonly fx = new Particles(160);
+  private readonly fxRng = new Rng(7);
+  private lastState: AthleteState = 'ride';
+  private wakeTime = 0;
   private frame = 0;
   private comboFlash = 0;
   private lastCombo = 0;
@@ -113,7 +122,8 @@ export class PlayScreen implements Screen {
   }
 
   private get sky(): Sky {
-    return this.mode === 'tour' ? TOUR_SPOTS[this.spot].sky : 'day';
+    // a tour spot has its own light; every other run has the real one
+    return this.mode === 'tour' ? TOUR_SPOTS[this.spot].sky : this.ctx.r.env.sky;
   }
 
   get current(): Game {
@@ -181,6 +191,8 @@ export class PlayScreen implements Screen {
   }
 
   private newRun(): void {
+    this.ctx.r.env.newRun();
+    this.fx.clear();
     this.recording.clear();
     this.tourStars = 0;
     this.legBanner = 0;
@@ -266,6 +278,7 @@ export class PlayScreen implements Screen {
       if (wasFrozen) pressed = true;
     }
     g.update(dt, pressed, held);
+    this.effects(dt);
     this.tutorial.afterStep(g, dt);
     if (this.tutorial.step === 'done') {
       this.tutorial.stop();
@@ -294,6 +307,30 @@ export class PlayScreen implements Screen {
     if (this.lastPhase === 'running' && g.phase === 'over') this.runEnded();
     this.lastPhase = g.phase;
     if (this.bannerTime > 0) this.bannerTime -= dt;
+  }
+
+  /** Splashes when the board leaves or meets the water, a wipeout's spray, and the wake while riding. */
+  private effects(dt: number): void {
+    const g = this.game;
+    const a = g.athlete;
+    const r = this.ctx.r;
+    const x = g.cfg.playerX;
+    const sea = r.seaY;
+    const push = -g.effectiveSpeed * 0.5;
+    if (a.state !== this.lastState) {
+      if (a.state === 'air' && this.lastState === 'ride') this.fx.splash(this.fxRng, x, sea - 1, 10, 1.6, push, SPRAY);
+      else if (a.state === 'ride' && this.lastState === 'air') this.fx.splash(this.fxRng, x, sea - 1, 8, 2.2, push, SPRAY);
+      else if (a.state === 'crash') this.fx.splash(this.fxRng, x, sea - 2, 22, 2.6, push, SPRAY);
+      this.lastState = a.state;
+    }
+    this.wakeTime += dt;
+    if (a.state === 'ride' && g.phase === 'running' && this.wakeTime > 0.03) {
+      this.wakeTime = 0;
+      // foam left behind on the water: it stays in place while the world scrolls
+      const back = g.sport === 'wing' ? x + 3 : x - 14;
+      this.fx.spawn(back + this.fxRng.range(-2, 2), sea - this.fxRng.range(0, 2), -g.effectiveSpeed, -this.fxRng.range(0, 8), 0.5 + this.fxRng.next() * 0.3, this.fxRng.next() < 0.6 ? C.white : C.foamShadow, 0);
+    }
+    this.fx.update(dt, sea + 2);
   }
 
   /** One ghost sample per 1/20 s of the run. */
@@ -382,9 +419,11 @@ export class PlayScreen implements Screen {
     this.drawGhost(distance, alpha);
     const blink = g.grace > 0 && Math.floor(g.clock * 12) % 2 === 1;
     if (!blink) r.athlete(this.sprites(), sport, g.athlete, cfg.playerX, alpha, g.clock, 1, r.seaY, cfg.playerW);
+    this.fx.draw(r);
     if (this.mode === 'bigwave') r.giantWave(this.waveFront(), g.clock);
     if (moved) r.ctx.restore();
     r.surfaceFront(distance);
+    r.weatherFront(distance);
     this.hud();
     this.tutorialPrompt();
   }

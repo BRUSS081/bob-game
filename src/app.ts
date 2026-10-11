@@ -16,6 +16,7 @@ import { CustomizeScreen } from './ui/customize.ts';
 import { HomeScreen } from './ui/home.ts';
 import { MissionsScreen } from './ui/missions.ts';
 import { SetupScreen } from './ui/setup.ts';
+import { SettingsScreen } from './ui/settings.ts';
 import { TourScreen } from './ui/tour.ts';
 import { AlbumScreen } from './ui/album.ts';
 import { PlayScreen } from './ui/play.ts';
@@ -56,7 +57,9 @@ export class App implements Context {
       album: new AlbumScreen(this),
       setup: new SetupScreen(this),
       tour: new TourScreen(this),
+      settings: new SettingsScreen(this),
     };
+    this.r.env.apply(this.profile.sky, this.profile.weather);
     registerGames(this, (id, screen) => this.addScreen(id, screen));
     this.screen = this.screens.home as Screen;
     this.screen.enter();
@@ -135,6 +138,7 @@ export class App implements Context {
   }
 
   update(dt: number): void {
+    this.r.env.update(dt);
     const input = this.input;
     const l = this.display.layout;
     for (let i = 0; i < input.count; i++) {

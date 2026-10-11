@@ -15,84 +15,15 @@ import { SPIN_STEPS, type AthleteSprites } from '../sprites/sheet.ts';
 import { ADVANCE, BitmapFont, GLYPH_H, digitCount, splitPoint } from './font.ts';
 import { t } from '../i18n/strings.ts';
 import { C, PALETTE, PALETTE_CSS } from './palette.ts';
+import { ARC, Environment } from '../env/environment.ts';
+import type { Sky } from '../env/sky.ts';
+import { CloudArt, FogCanvas, HORIZON_ABOVE_SEA, SKIES, SkyCanvas, drawClouds, drawGlitter, drawOrb, drawStars, drawWeatherFront, orbPosition } from './sky.ts';
 
-/** Time-of-day looks of the sky and the sea, all from the master palette. */
-export type Sky = 'dawn' | 'day' | 'sunset' | 'night';
-
-interface SkyColors {
-  bands: readonly [number, number, number, number];
-  horizon: number;
-  far: number;
-  farDash: readonly [number, number, number, number];
-  sea: number;
-  seaTop: number;
-  seaDash: readonly [number, number, number];
-  mid: number;
-  deep: number;
-  stars: boolean;
-  /** Sun or moon color, 0 for none. */
-  orb: number;
-}
-
-export const SKIES: Record<Sky, SkyColors> = {
-  dawn: {
-    bands: [C.indigo, C.mauve, C.rose, C.sun],
-    horizon: C.deep,
-    far: C.teal,
-    farDash: [C.mauve, C.rose, C.sea, C.rose],
-    sea: C.sea,
-    seaTop: C.turquoise,
-    seaDash: [C.rose, C.turquoise, C.aqua],
-    mid: C.teal,
-    deep: C.deep,
-    stars: false,
-    orb: C.sun,
-  },
-  day: {
-    bands: [C.blue, C.sky, C.skyLight, C.skyPale],
-    horizon: C.deep,
-    far: C.teal,
-    farDash: [C.teal, C.sea, C.sea, C.turquoise],
-    sea: C.sea,
-    seaTop: C.turquoise,
-    seaDash: [C.turquoise, C.turquoise, C.aqua],
-    mid: C.teal,
-    deep: C.deep,
-    stars: false,
-    orb: 0,
-  },
-  sunset: {
-    bands: [C.indigo, C.violet, C.coral, C.orange],
-    horizon: C.abyss,
-    far: C.deep,
-    farDash: [C.violet, C.coral, C.orange, C.gold],
-    sea: C.teal,
-    seaTop: C.sea,
-    seaDash: [C.orange, C.gold, C.coral],
-    mid: C.deep,
-    deep: C.abyss,
-    stars: false,
-    orb: C.gold,
-  },
-  night: {
-    bands: [C.ink, C.navy, C.indigo, C.indigo],
-    horizon: C.ink,
-    far: C.abyss,
-    farDash: [C.navy, C.deep, C.deep, C.teal],
-    sea: C.deep,
-    seaTop: C.teal,
-    seaDash: [C.teal, C.silver, C.teal],
-    mid: C.abyss,
-    deep: C.navy,
-    stars: true,
-    orb: C.mist,
-  },
-};
+export type { Sky } from '../env/sky.ts';
+export { SKIES, HORIZON_ABOVE_SEA } from './sky.ts';
 
 const STAR_ROWS = ['...#...', '..###..', '#######', '.#####.', '..###..', '.##.##.', '.#...#.'];
 
-/** Height of the background sea between the horizon and the surface line. */
-export const HORIZON_ABOVE_SEA = 34;
 const RIDE: readonly FrameName[] = ['ride0', 'ride1', 'ride2', 'ride3'];
 
 export function lerp(a: number, b: number, k: number): number {
@@ -184,6 +115,12 @@ export class Renderer {
   /** Fish and the other sea creatures, built on first use. */
   readonly creatures = new CreatureCache(rasterCanvas);
   private readonly treasureCanvases = new Map<string, HTMLCanvasElement>();
+  /** Time of day and weather, shared by every screen. */
+  readonly env = new Environment();
+  private readonly cloudArt = new CloudArt(rasterCanvas);
+  private readonly skyCanvas = new SkyCanvas(rasterCanvas);
+  private readonly fogCanvas = new FogCanvas(rasterCanvas);
+  private readonly orb = { x: 0, y: 0 };
 
   constructor(display: Display) {
     this.display = display;
@@ -212,7 +149,7 @@ export class Renderer {
     this.ctx.fillRect(x, y, w, h);
   }
 
-  private dashes(y: number, spacing: number, len: number, offset: number, c: number): void {
+  dashes(y: number, spacing: number, len: number, offset: number, c: number): void {
     const start = -Math.floor(((offset % spacing) + spacing) % spacing);
     this.ctx.fillStyle = PALETTE_CSS[c];
     for (let x = start; x < this.W; x += spacing) this.ctx.fillRect(x, y, len, 1);
@@ -247,58 +184,73 @@ export class Renderer {
 
   // ------------------------------------------------------------ world
 
-  backdrop(distance: number, sky: Sky = 'day'): void {
+  /**
+   * Sky, sun or moon, clouds and the sea down to the bottom of the screen,
+   * for the real time of day and the run's weather. A game may ask for a
+   * sky of its own (a day passing, a tour spot); the weather stays the run's.
+   */
+  backdrop(distance: number, sky: Sky = this.env.sky): void {
     const { W, H, seaY } = this;
+    const env = this.env;
+    const look = env.look;
+    const grey = look.grey;
     const k = SKIES[sky];
     const horizon = seaY - HORIZON_ABOVE_SEA;
-    const b1 = Math.round(horizon * 0.28);
-    const b2 = Math.round(horizon * 0.55);
-    const b3 = Math.round(horizon * 0.8);
-    this.fill(k.bands[0], 0, 0, W, b1);
-    this.fill(k.bands[1], 0, b1, W, b2 - b1);
-    this.fill(k.bands[2], 0, b2, W, b3 - b2);
-    this.fill(k.bands[3], 0, b3, W, horizon - b3);
-    if (k.stars) {
-      // fixed stars, a few twinkle with the scroll
-      for (let i = 0; i < 40; i++) {
-        const x = (i * 97 + 13) % W;
-        const y = (i * 53 + 7) % Math.max(1, b3);
-        if ((i + Math.floor(distance / 200)) % 7 !== 0) this.fill(i % 5 === 0 ? C.sun : C.white, x, y, 1, 1);
-      }
+    if (horizon > 0) this.ctx.drawImage(this.skyCanvas.get(sky, grey, W, horizon), 0, 0);
+    if (k.stars && !grey) drawStars(this, horizon - 6, env.clock);
+    if (!grey) {
+      // the real arc when this is the real sky; a fixed place for a sky chosen by a game
+      orbPosition(this, sky === env.sky ? env.arc : ARC[sky], horizon, this.orb);
+      drawOrb(this, sky, this.orb.x, this.orb.y, env.moon);
     }
-    if (k.orb) {
-      // sun low on the horizon, or the moon high up
-      const big = sky !== 'night';
-      const cx = Math.round(W * (big ? 0.72 : 0.8));
-      const cy = big ? horizon - 4 : Math.round(b1 * 0.8 + 8);
-      const rad = big ? 14 : 6;
-      for (let dy = -rad; dy <= rad; dy++) {
-        const half = Math.round(Math.sqrt(rad * rad - dy * dy));
-        if (cy + dy < horizon) this.fill(k.orb, cx - half, cy + dy, half * 2 + 1, 1);
-      }
-    }
+    drawClouds(this, this.cloudArt, sky, grey, look.clouds, horizon, distance, env.clock);
+    // the far sea at the horizon, darker under rain clouds and darker still in a storm
+    const dark = grey && sky !== 'night';
+    const storm = dark && look.lightning;
+    const far = dark ? C.deep : k.far;
+    const sea = storm ? C.deep : dark ? C.teal : k.sea;
+    const seaTop = storm ? C.teal : dark ? C.sea : k.seaTop;
+    const mid = dark ? C.deep : k.mid;
+    const deep = dark ? C.abyss : k.deep;
     this.fill(k.horizon, 0, horizon, W, 4);
-    this.fill(k.far, 0, horizon + 4, W, seaY - horizon - 4);
+    this.fill(far, 0, horizon + 4, W, seaY - horizon - 4);
     this.dashes(horizon + 2, 41, 4, distance * 0.1, k.farDash[0]);
     this.dashes(horizon + 9, 53, 6, distance * 0.2 + 17, k.farDash[1]);
     this.dashes(horizon + 17, 37, 5, distance * 0.3 + 5, k.farDash[2]);
     this.dashes(horizon + 26, 47, 8, distance * 0.45 + 29, k.farDash[3]);
-    this.fill(k.sea, 0, seaY, W, H - seaY);
-    this.fill(k.seaTop, 0, seaY, W, 4);
+    if (look.swell > 1.3) {
+      // whitecaps on a rough sea
+      this.dashes(horizon + 12, 29, 3, distance * 0.25 + env.clock * 9, C.white);
+      this.dashes(horizon + 22, 23, 4, distance * 0.4 + env.clock * 13, C.foamShadow);
+    }
+    if (!grey) drawGlitter(this, this.orb.x, horizon + 5, seaY - 2, k.glitter, env.clock);
+    this.fill(sea, 0, seaY, W, H - seaY);
+    this.fill(seaTop, 0, seaY, W, 4);
     this.dashes(seaY + 14, 61, 10, distance + 11, k.seaDash[0]);
     this.dashes(seaY + 27, 43, 6, distance * 1.2 + 3, k.seaDash[1]);
     this.dashes(seaY + 41, 71, 12, distance * 1.4 + 37, k.seaDash[2]);
+    if (look.swell > 1.3) this.dashes(seaY + 20, 37, 5, distance * 1.1 + env.clock * 20, storm ? C.foamShadow : C.aqua);
     const depth = H - seaY;
     if (depth > 90) {
-      this.fill(k.mid, 0, seaY + 80, W, depth - 80);
-      this.dashes(seaY + 80, 29, 14, distance * 1.4 + 7, k.sea);
-      this.dashes(seaY + 112, 53, 9, distance * 1.6 + 21, k.sea);
+      this.fill(mid, 0, seaY + 80, W, depth - 80);
+      this.dashes(seaY + 80, 29, 14, distance * 1.4 + 7, sea);
+      this.dashes(seaY + 112, 53, 9, distance * 1.6 + 21, sea);
     }
     if (depth > 180) {
-      this.fill(k.deep, 0, seaY + 170, W, depth - 170);
-      this.dashes(seaY + 170, 37, 18, distance * 1.6 + 13, k.mid);
-      this.dashes(seaY + 214, 67, 10, distance * 1.8 + 41, k.mid);
+      this.fill(deep, 0, seaY + 170, W, depth - 170);
+      this.dashes(seaY + 170, 37, 18, distance * 1.6 + 13, mid);
+      this.dashes(seaY + 214, 67, 10, distance * 1.8 + 41, mid);
     }
+    if (look.fog > 0 && horizon > 0) {
+      // mist over the horizon; thick fog veils the sky and hides the far sea
+      // (grey mist in the dark, white by day)
+      this.ctx.drawImage(this.fogCanvas.get(W, horizon, look.fog >= 1, sky === 'night' ? C.slate : C.mist), 0, 0);
+    }
+  }
+
+  /** Rain and lightning, over everything in the scene but under the UI. */
+  weatherFront(distance: number): void {
+    drawWeatherFront(this, distance);
   }
 
   /** Crest line drawn over the athletes' boards and the obstacles' bases. */

@@ -89,6 +89,11 @@ export abstract class MiniGame implements Screen {
     return LOWER_IS_BETTER.has(this.id);
   }
 
+  /** Games under the open sky get rain and lightning over the scene (not the ones under water or seen from above). */
+  protected get outdoors(): boolean {
+    return true;
+  }
+
   /** Games without a score (the aquarium) skip the start card and the score. */
   protected get scored(): boolean {
     return true;
@@ -100,6 +105,7 @@ export abstract class MiniGame implements Screen {
     this.time = 0;
     this.score = 0;
     for (const p of this.popups) p.age = POPUP_TIME;
+    this.ctx.r.env.newRun();
     this.reset();
     this.phase = this.scored ? 'ready' : 'running';
     this.pressed = false;
@@ -166,6 +172,7 @@ export abstract class MiniGame implements Screen {
           this.time = 0;
           this.score = 0;
           for (const p of this.popups) p.age = POPUP_TIME;
+          this.ctx.r.env.newRun();
           this.reset();
           this.phase = 'running';
           this.start();
@@ -217,6 +224,7 @@ export abstract class MiniGame implements Screen {
   render(alpha: number): void {
     const r = this.ctx.r;
     this.draw(this.phase === 'running' ? alpha : 1);
+    if (this.outdoors) r.weatherFront(this.clock * 20);
     const u = r.u;
     for (const p of this.popups) {
       if (p.age >= POPUP_TIME || (p.age > POPUP_TIME * 0.7 && Math.floor(p.age * 20) % 2 === 0)) continue;

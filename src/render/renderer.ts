@@ -5,6 +5,7 @@ import { DOLPHIN_COUNT, type Dolphins } from '../game/dolphins.ts';
 import type { Obstacle, ObstacleName } from '../game/obstacles.ts';
 import type { SportId } from '../game/sport.ts';
 import { ANCHOR_X, ANCHOR_Y, FRAME_H, FRAME_W, type FrameName } from '../sprites/compose.ts';
+import { ICON, iconRaster, type IconName } from '../sprites/icons.ts';
 import { dolphinRasters, powerRaster, propRasters } from '../sprites/props.ts';
 import type { Ramp } from '../sprites/ramps.ts';
 import type { Raster } from '../sprites/raster.ts';
@@ -12,6 +13,81 @@ import { SPIN_STEPS, type AthleteSprites } from '../sprites/sheet.ts';
 import { ADVANCE, BitmapFont, GLYPH_H, digitCount, splitPoint } from './font.ts';
 import { t } from '../i18n/strings.ts';
 import { C, PALETTE, PALETTE_CSS } from './palette.ts';
+
+/** Time-of-day looks of the sky and the sea, all from the master palette. */
+export type Sky = 'dawn' | 'day' | 'sunset' | 'night';
+
+interface SkyColors {
+  bands: readonly [number, number, number, number];
+  horizon: number;
+  far: number;
+  farDash: readonly [number, number, number, number];
+  sea: number;
+  seaTop: number;
+  seaDash: readonly [number, number, number];
+  mid: number;
+  deep: number;
+  stars: boolean;
+  /** Sun or moon color, 0 for none. */
+  orb: number;
+}
+
+export const SKIES: Record<Sky, SkyColors> = {
+  dawn: {
+    bands: [C.indigo, C.mauve, C.rose, C.sun],
+    horizon: C.deep,
+    far: C.teal,
+    farDash: [C.mauve, C.rose, C.sea, C.rose],
+    sea: C.sea,
+    seaTop: C.turquoise,
+    seaDash: [C.rose, C.turquoise, C.aqua],
+    mid: C.teal,
+    deep: C.deep,
+    stars: false,
+    orb: C.sun,
+  },
+  day: {
+    bands: [C.blue, C.sky, C.skyLight, C.skyPale],
+    horizon: C.deep,
+    far: C.teal,
+    farDash: [C.teal, C.sea, C.sea, C.turquoise],
+    sea: C.sea,
+    seaTop: C.turquoise,
+    seaDash: [C.turquoise, C.turquoise, C.aqua],
+    mid: C.teal,
+    deep: C.deep,
+    stars: false,
+    orb: 0,
+  },
+  sunset: {
+    bands: [C.indigo, C.violet, C.coral, C.orange],
+    horizon: C.abyss,
+    far: C.deep,
+    farDash: [C.violet, C.coral, C.orange, C.gold],
+    sea: C.teal,
+    seaTop: C.sea,
+    seaDash: [C.orange, C.gold, C.coral],
+    mid: C.deep,
+    deep: C.abyss,
+    stars: false,
+    orb: C.gold,
+  },
+  night: {
+    bands: [C.ink, C.navy, C.indigo, C.indigo],
+    horizon: C.ink,
+    far: C.abyss,
+    farDash: [C.navy, C.deep, C.deep, C.teal],
+    sea: C.deep,
+    seaTop: C.teal,
+    seaDash: [C.teal, C.silver, C.teal],
+    mid: C.abyss,
+    deep: C.navy,
+    stars: true,
+    orb: C.mist,
+  },
+};
+
+const STAR_ROWS = ['...#...', '..###..', '#######', '.#####.', '..###..', '.##.##.', '.#...#.'];
 
 /** Height of the background sea between the horizon and the surface line. */
 export const HORIZON_ABOVE_SEA = 34;
@@ -100,6 +176,7 @@ export class Renderer {
   private readonly powers: Record<'wave' | 'gust', HTMLCanvasElement | null> = { wave: null, gust: null };
   private readonly swatches = new Map<Ramp, [string, string, string]>();
   private dolphinCanvases: HTMLCanvasElement[] | null = null;
+  private readonly icons = new Map<IconName, HTMLCanvasElement>();
   private readonly ghosts = new WeakMap<AthleteSprites, AthleteSprites>();
 
   constructor(display: Display) {
@@ -164,37 +241,57 @@ export class Renderer {
 
   // ------------------------------------------------------------ world
 
-  backdrop(distance: number): void {
+  backdrop(distance: number, sky: Sky = 'day'): void {
     const { W, H, seaY } = this;
+    const k = SKIES[sky];
     const horizon = seaY - HORIZON_ABOVE_SEA;
     const b1 = Math.round(horizon * 0.28);
     const b2 = Math.round(horizon * 0.55);
     const b3 = Math.round(horizon * 0.8);
-    this.fill(C.blue, 0, 0, W, b1);
-    this.fill(C.sky, 0, b1, W, b2 - b1);
-    this.fill(C.skyLight, 0, b2, W, b3 - b2);
-    this.fill(C.skyPale, 0, b3, W, horizon - b3);
-    this.fill(C.deep, 0, horizon, W, 4);
-    this.fill(C.teal, 0, horizon + 4, W, seaY - horizon - 4);
-    this.dashes(horizon + 2, 41, 4, distance * 0.1, C.teal);
-    this.dashes(horizon + 9, 53, 6, distance * 0.2 + 17, C.sea);
-    this.dashes(horizon + 17, 37, 5, distance * 0.3 + 5, C.sea);
-    this.dashes(horizon + 26, 47, 8, distance * 0.45 + 29, C.turquoise);
-    this.fill(C.sea, 0, seaY, W, H - seaY);
-    this.fill(C.turquoise, 0, seaY, W, 4);
-    this.dashes(seaY + 14, 61, 10, distance + 11, C.turquoise);
-    this.dashes(seaY + 27, 43, 6, distance * 1.2 + 3, C.turquoise);
-    this.dashes(seaY + 41, 71, 12, distance * 1.4 + 37, C.aqua);
+    this.fill(k.bands[0], 0, 0, W, b1);
+    this.fill(k.bands[1], 0, b1, W, b2 - b1);
+    this.fill(k.bands[2], 0, b2, W, b3 - b2);
+    this.fill(k.bands[3], 0, b3, W, horizon - b3);
+    if (k.stars) {
+      // fixed stars, a few twinkle with the scroll
+      for (let i = 0; i < 40; i++) {
+        const x = (i * 97 + 13) % W;
+        const y = (i * 53 + 7) % Math.max(1, b3);
+        if ((i + Math.floor(distance / 200)) % 7 !== 0) this.fill(i % 5 === 0 ? C.sun : C.white, x, y, 1, 1);
+      }
+    }
+    if (k.orb) {
+      // sun low on the horizon, or the moon high up
+      const big = sky !== 'night';
+      const cx = Math.round(W * (big ? 0.72 : 0.8));
+      const cy = big ? horizon - 4 : Math.round(b1 * 0.8 + 8);
+      const rad = big ? 14 : 6;
+      for (let dy = -rad; dy <= rad; dy++) {
+        const half = Math.round(Math.sqrt(rad * rad - dy * dy));
+        if (cy + dy < horizon) this.fill(k.orb, cx - half, cy + dy, half * 2 + 1, 1);
+      }
+    }
+    this.fill(k.horizon, 0, horizon, W, 4);
+    this.fill(k.far, 0, horizon + 4, W, seaY - horizon - 4);
+    this.dashes(horizon + 2, 41, 4, distance * 0.1, k.farDash[0]);
+    this.dashes(horizon + 9, 53, 6, distance * 0.2 + 17, k.farDash[1]);
+    this.dashes(horizon + 17, 37, 5, distance * 0.3 + 5, k.farDash[2]);
+    this.dashes(horizon + 26, 47, 8, distance * 0.45 + 29, k.farDash[3]);
+    this.fill(k.sea, 0, seaY, W, H - seaY);
+    this.fill(k.seaTop, 0, seaY, W, 4);
+    this.dashes(seaY + 14, 61, 10, distance + 11, k.seaDash[0]);
+    this.dashes(seaY + 27, 43, 6, distance * 1.2 + 3, k.seaDash[1]);
+    this.dashes(seaY + 41, 71, 12, distance * 1.4 + 37, k.seaDash[2]);
     const depth = H - seaY;
     if (depth > 90) {
-      this.fill(C.teal, 0, seaY + 80, W, depth - 80);
-      this.dashes(seaY + 80, 29, 14, distance * 1.4 + 7, C.sea);
-      this.dashes(seaY + 112, 53, 9, distance * 1.6 + 21, C.sea);
+      this.fill(k.mid, 0, seaY + 80, W, depth - 80);
+      this.dashes(seaY + 80, 29, 14, distance * 1.4 + 7, k.sea);
+      this.dashes(seaY + 112, 53, 9, distance * 1.6 + 21, k.sea);
     }
     if (depth > 180) {
-      this.fill(C.deep, 0, seaY + 170, W, depth - 170);
-      this.dashes(seaY + 170, 37, 18, distance * 1.6 + 13, C.teal);
-      this.dashes(seaY + 214, 67, 10, distance * 1.8 + 41, C.teal);
+      this.fill(k.deep, 0, seaY + 170, W, depth - 170);
+      this.dashes(seaY + 170, 37, 18, distance * 1.6 + 13, k.mid);
+      this.dashes(seaY + 214, 67, 10, distance * 1.8 + 41, k.mid);
     }
   }
 
@@ -282,6 +379,76 @@ export class Renderer {
       } else {
         const alt = Math.round(d.altitude(i));
         this.ctx.drawImage(list[pose], x, this.seaY - alt - Math.round(size * 0.7));
+      }
+    }
+  }
+
+  /**
+   * The giant wave of the big wave mode, a wall of water curling forward;
+   * `front` is the x of its face at sea level.
+   */
+  giantWave(front: number, clock: number): void {
+    const { seaY } = this;
+    const height = Math.min(110, seaY - 24);
+    const crest = seaY - height;
+    // the face rises steeply from the front, then the wall runs back off screen
+    for (let x = front - 220; x <= front; x++) {
+      const d = front - x;
+      const top = Math.round(seaY - height * Math.min(1, Math.sqrt(d / 22)));
+      const h = seaY - top;
+      if (h <= 0) continue;
+      this.fill(C.white, x, top, 1, Math.min(3, h));
+      if (h > 3) this.fill(C.aqua, x, top + 3, 1, Math.min(4, h - 3));
+      if (h > 7) this.fill(d < 14 ? C.turquoise : C.sea, x, top + 7, 1, Math.min(Math.round(h * 0.35), h - 7));
+      const mid = 7 + Math.round(h * 0.35);
+      if (h > mid) this.fill(d < 14 ? C.sea : C.teal, x, top + mid, 1, Math.min(Math.round(h * 0.3), h - mid));
+      const low = mid + Math.round(h * 0.3);
+      if (h > low) this.fill(d < 14 ? C.teal : C.deep, x, top + low, 1, h - low);
+    }
+    // streaks running up the face
+    for (let i = 0; i < 6; i++) {
+      const sy = seaY - 6 - ((i * 19 + Math.floor(clock * 50)) % (height - 10));
+      const sx = front - 4 - ((i * 23) % 30);
+      this.fill(C.aqua, sx, sy, 4, 1);
+    }
+    // the lip curling over in front of the face, the shadowed barrel under it and the curtain falling from its tip
+    const lip = 22;
+    for (let i = -16; i <= lip; i++) {
+      const x = front + i;
+      const drop = i > 0 ? Math.round((i * i) / 18) : 0;
+      const thick = Math.max(3, 9 - Math.round(Math.max(0, i) / 4));
+      const under = crest + drop + thick;
+      const floor = i < 0 ? Math.round(seaY - height * Math.min(1, Math.sqrt(-i / 22))) : seaY;
+      if (floor > under) this.fill(i < lip - 4 ? C.deep : C.teal, x, under, 1, floor - under);
+      if (i < 0) continue;
+      this.fill(C.white, x, crest + drop, 1, 2);
+      this.fill(C.aqua, x, crest + drop + 2, 1, thick - 2);
+      if (i >= lip - 4) {
+        for (let y = under; y < seaY; y += 2) this.fill((y + i) % 4 === 0 ? C.white : C.aqua, x, y + ((i + Math.floor(clock * 20)) & 1), 1, 1);
+      }
+    }
+    // foam at the foot and spray off the lip
+    for (let i = 0; i < 12; i++) {
+      const fx = Math.round(front - 10 + ((i * 13 + clock * 90) % 48) - 12);
+      this.fill(C.white, fx, seaY - 2 - (i % 3), 3, 1);
+      const sx = Math.round(front + lip - 2 + ((i * 7 + clock * 40) % 16));
+      const sy = Math.round(crest + Math.round((lip * lip) / 18) - 4 - ((i * 5 + clock * 30) % 12));
+      this.fill(C.white, sx, sy, 1, 1);
+    }
+  }
+
+  /** Three stars, earned ones in gold, centered on cx. */
+  stars(cx: number, y: number, earned: number, scale: number): void {
+    const rows = STAR_ROWS;
+    const w = rows[0].length * scale;
+    const gap = 3 * scale;
+    const x0 = Math.round(cx - (3 * w + 2 * gap) / 2);
+    for (let i = 0; i < 3; i++) {
+      const color = i < earned ? C.gold : C.slate;
+      for (let ry = 0; ry < rows.length; ry++) {
+        for (let rx = 0; rx < rows[ry].length; rx++) {
+          if (rows[ry][rx] === '#') this.fill(color, x0 + i * (w + gap) + rx * scale, y + ry * scale, scale, scale);
+        }
       }
     }
   }
@@ -459,6 +626,23 @@ export class Renderer {
     const left = Math.round(r.x + (r.w - 5 * scale) / 2);
     this.fill(C.white, left, top, 2 * scale, h);
     this.fill(C.white, left + 3 * scale, top, 2 * scale, h);
+  }
+
+  /** A 16×16 icon, scaled by whole pixels. */
+  icon(name: IconName, x: number, y: number, scale: number): void {
+    let c = this.icons.get(name);
+    if (!c) {
+      c = rasterCanvas(iconRaster(name));
+      this.icons.set(name, c);
+    }
+    this.ctx.drawImage(c, Math.round(x), Math.round(y), ICON * scale, ICON * scale);
+  }
+
+  /** A square button with an icon. */
+  iconButton(r: Rect, name: IconName, scale: number, focused = false): void {
+    this.button(r, '', 'normal', scale, focused);
+    const s = Math.max(1, Math.floor(Math.min(r.w, r.h) / (ICON + 4)));
+    this.icon(name, r.x + (r.w - ICON * s) / 2, r.y + (r.h - ICON * s) / 2, s);
   }
 
   /** Three-tone swatch of a customization ramp. */

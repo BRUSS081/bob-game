@@ -1,7 +1,7 @@
 import { Rng } from '../core/rng.ts';
 import { CHARACTERS, OPTIONS, TABS, optionValue, randomize, stepOption, type OptionSpec, type Tab } from '../custom/athlete.ts';
 import type { AthleteState } from '../game/athletes.ts';
-import type { SportId } from '../game/sport.ts';
+import { cycleSport, type SportId } from '../game/sport.ts';
 import { t } from '../i18n/strings.ts';
 import { GLYPH_H } from '../render/font.ts';
 import { C } from '../render/palette.ts';
@@ -77,6 +77,8 @@ export class CustomizeScreen implements Screen {
   private readonly random = newRect();
   private readonly done = newRect();
   private readonly preview = newRect();
+  private readonly sportPrev = newRect();
+  private readonly sportNext = newRect();
   private readonly list = newRect();
   private readonly ctx: Context;
 
@@ -87,6 +89,18 @@ export class CustomizeScreen implements Screen {
       this.nextRects.push(newRect());
       this.valueRects.push(newRect());
     }
+  }
+
+  /** The suit and the gear are per sport: switch sport right here. */
+  private changeSport(step: number): void {
+    const p = this.ctx.profile;
+    p.setSport(cycleSport(p.sport, step));
+    this.ctx.changed();
+    const tab = this.tab;
+    const focus = this.focus;
+    this.enter();
+    this.setTab(tab);
+    this.focus = Math.min(focus, this.rows.length + 1);
   }
 
   enter(): void {
@@ -177,6 +191,10 @@ export class CustomizeScreen implements Screen {
       case 'KeyR':
         this.shuffle();
         break;
+      case 'KeyA':
+      case 'KeyD':
+        this.changeSport(code === 'KeyA' ? -1 : 1);
+        break;
       case 'Escape':
         this.close();
         break;
@@ -184,6 +202,14 @@ export class CustomizeScreen implements Screen {
   }
 
   tap(x: number, y: number): boolean {
+    if (inside(this.sportPrev, x, y)) {
+      this.changeSport(-1);
+      return true;
+    }
+    if (inside(this.sportNext, x, y)) {
+      this.changeSport(1);
+      return true;
+    }
     for (let i = 0; i < TABS.length; i++) {
       if (inside(this.tabRects[i], x, y)) {
         this.setTab(TABS[i]);
@@ -346,8 +372,17 @@ export class CustomizeScreen implements Screen {
     r.athlete(this.ctx.player(), sport, this.pose, anchor - 8 * scale, 0, this.clock, scale, surface);
     r.ctx.restore();
     r.fill(C.white, p.x, surface + scale, p.w, scale);
+    // "< SPORT >" at the top of the card
     const name = t.sports[sport];
-    const ts = r.font.width(name, u) + 6 * u <= p.w ? u : 1;
-    r.font.draw(r.ctx, name, p.x + 3 * ts, p.y + 3 * ts, C.navy, ts);
+    const aw = 10 * u;
+    const ah = (GLYPH_H + 5) * u;
+    const ts = r.font.width(t.sports.wing, u) + 2 * aw + 10 * u <= p.w ? u : 1;
+    const nameW = r.font.width(t.sports.wing, ts) + 4 * ts;
+    const cx = p.x + Math.round(p.w / 2);
+    setRect(this.sportPrev, cx - nameW / 2 - aw, p.y + 2 * u, aw, ah);
+    setRect(this.sportNext, cx + nameW / 2, p.y + 2 * u, aw, ah);
+    r.arrowButton(this.sportPrev, -1, u);
+    r.arrowButton(this.sportNext, 1, u);
+    r.centered(name, cx, p.y + 2 * u + Math.round((ah - GLYPH_H * ts) / 2), C.white, ts);
   }
 }

@@ -14,6 +14,7 @@ const SPACING = 30;
 /** Seconds before the first pod, and between pods. */
 const FIRST: readonly [number, number] = [20, 35];
 const BETWEEN: readonly [number, number] = [40, 70];
+const OFTEN: readonly [number, number] = [6, 12];
 
 /**
  * A rare, harmless event: a pod of dolphins swims past, jumping. Jumping
@@ -27,11 +28,14 @@ export class Dolphins {
   scored = false;
   private wait = 0;
 
+  /** `often` (free ride) brings pods every few seconds. */
+  often = false;
+
   reset(rng: Rng): void {
     this.active = false;
     this.time = 0;
     this.scored = false;
-    this.wait = rng.range(FIRST[0], FIRST[1]);
+    this.wait = this.often ? rng.range(OFTEN[0], OFTEN[1]) : rng.range(FIRST[0], FIRST[1]);
   }
 
   update(dt: number, rng: Rng): void {
@@ -39,7 +43,7 @@ export class Dolphins {
       this.time += dt;
       if (this.time >= DURATION) {
         this.active = false;
-        this.wait = rng.range(BETWEEN[0], BETWEEN[1]);
+        this.wait = this.often ? rng.range(OFTEN[0], OFTEN[1]) : rng.range(BETWEEN[0], BETWEEN[1]);
       }
       return;
     }

@@ -1,5 +1,8 @@
 import type { Input } from '../core/input.ts';
 import type { AthleteConfig } from '../custom/athlete.ts';
+import type { Album } from '../custom/album.ts';
+import type { RunMode } from '../game/modes.ts';
+import type { MiniGameId } from '../games/registry.ts';
 import type { MissionLog } from '../custom/missions.ts';
 import type { Profile } from '../custom/profile.ts';
 import type { Athlete } from '../game/athletes.ts';
@@ -7,7 +10,7 @@ import type { SportId } from '../game/sport.ts';
 import type { Renderer } from '../render/renderer.ts';
 import type { AthleteSprites } from '../sprites/sheet.ts';
 
-export type ScreenId = 'home' | 'customize' | 'game' | 'missions';
+export type ScreenId = 'home' | 'customize' | 'game' | 'missions' | 'album' | 'setup' | 'tour' | MiniGameId;
 
 /** What every screen can reach: drawing, saved choices and navigation. */
 export interface Context {
@@ -15,6 +18,7 @@ export interface Context {
   readonly input: Input;
   readonly profile: Profile;
   readonly missions: MissionLog;
+  readonly album: Album;
   /** Sprites of the current look for the current sport (cached, rebuilt only on change). */
   player(): AthleteSprites;
   /** Sprites for any look (LRU cached). */
@@ -24,8 +28,10 @@ export interface Context {
   /** Call after changing the sport, the rider or the look. */
   changed(): void;
   go(screen: ScreenId): void;
-  /** Starts a run of the current sport: a random one, or today's daily challenge. */
-  play(daily: boolean): void;
+  /** Starts a runner game in a mode (the tour starts at `spot`). */
+  playRunner(mode: RunMode, spot?: number): void;
+  /** Where the pointer is now, in game pixels (for steering by touch). */
+  pointer(): { readonly x: number; readonly y: number };
 }
 
 export interface Screen {

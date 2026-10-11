@@ -1,7 +1,9 @@
 import type { Display } from './core/display.ts';
 import type { Input } from './core/input.ts';
 import type { AthleteConfig } from './custom/athlete.ts';
+import { Album } from './custom/album.ts';
 import { MissionLog } from './custom/missions.ts';
+import type { RunMode } from './game/modes.ts';
 import { Profile } from './custom/profile.ts';
 import { createAthlete, type Athlete } from './game/athletes.ts';
 import { surfaceY } from './game/config.ts';
@@ -11,6 +13,9 @@ import { SpriteCache, type AthleteSprites } from './sprites/sheet.ts';
 import { CustomizeScreen } from './ui/customize.ts';
 import { HomeScreen } from './ui/home.ts';
 import { MissionsScreen } from './ui/missions.ts';
+import { SetupScreen } from './ui/setup.ts';
+import { TourScreen } from './ui/tour.ts';
+import { AlbumScreen } from './ui/album.ts';
 import { PlayScreen } from './ui/play.ts';
 import type { Context, Screen, ScreenId } from './ui/screen.ts';
 
@@ -23,12 +28,14 @@ export class App implements Context {
   readonly r: Renderer;
   readonly input: Input;
   readonly missions = new MissionLog();
+  readonly album = new Album();
   readonly profile = new Profile(this.missions.unlocked);
   private readonly display: Display;
   private readonly cache = new SpriteCache(12);
   private readonly demos = {} as Record<SportId, Athlete>;
   private playerSprites: AthleteSprites | null = null;
-  private readonly screens: Record<ScreenId, Screen>;
+  private readonly screens: Partial<Record<ScreenId, Screen>>;
+  private readonly pointerPos = { x: 0, y: 0 };
   private readonly playScreen: PlayScreen;
   private screen: Screen;
   private screenId: ScreenId = 'home';
@@ -38,8 +45,16 @@ export class App implements Context {
     this.input = input;
     this.r = new Renderer(display);
     this.playScreen = new PlayScreen(this);
-    this.screens = { home: new HomeScreen(this), customize: new CustomizeScreen(this), game: this.playScreen, missions: new MissionsScreen(this) };
-    this.screen = this.screens.home;
+    this.screens = {
+      home: new HomeScreen(this),
+      customize: new CustomizeScreen(this),
+      game: this.playScreen,
+      missions: new MissionsScreen(this),
+      album: new AlbumScreen(this),
+      setup: new SetupScreen(this),
+      tour: new TourScreen(this),
+    };
+    this.screen = this.screens.home as Screen;
     this.screen.enter();
   }
 
@@ -74,16 +89,31 @@ export class App implements Context {
     this.playerSprites = null;
   }
 
+  /** Registers a game's screen. */
+  addScreen(id: ScreenId, screen: Screen): void {
+    this.screens[id] = screen;
+  }
+
   go(id: ScreenId): void {
+    const screen = this.screens[id];
+    if (!screen) return;
     this.screenId = id;
-    this.screen = this.screens[id];
+    this.screen = screen;
     this.changed();
     this.screen.enter();
   }
 
-  play(daily: boolean): void {
-    this.playScreen.daily = daily;
+  playRunner(mode: RunMode, spot = 0): void {
+    this.playScreen.mode = mode;
+    this.playScreen.spot = spot;
     this.go('game');
+  }
+
+  pointer(): { readonly x: number; readonly y: number } {
+    const l = this.display.layout;
+    this.pointerPos.x = ((this.input.pointerX - l.cssLeft) * l.width) / l.cssWidth;
+    this.pointerPos.y = ((this.input.pointerY - l.cssTop) * l.height) / l.cssHeight;
+    return this.pointerPos;
   }
 
   /** Window blurred or tab hidden. */

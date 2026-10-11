@@ -1,11 +1,12 @@
 import { Rng } from '../core/rng.ts';
 import { AIR, KiteAthlete, SURFACE, WingAthlete, createAthlete, newBoxes, type Athlete } from './athletes.ts';
 import { overlaps } from './collision.ts';
-import { EARLY_BOOST, FLOW, KITE, SCORING, SPAWN_X, SURF, WING, type RunConfig } from './config.ts';
+import { EARLY_BOOST, FLOW, KITE, MODES, SCORING, SPAWN_X, SURF, WING, type RunConfig } from './config.ts';
+import type { RunMode } from './modes.ts';
 import { Dolphins } from './dolphins.ts';
 import { Obstacles, obstaclesFor } from './obstacles.ts';
 import { addBonus, addDistance, createScore, landPlain, landTrick, resetScore, total } from './score.ts';
-import type { SportId } from './sport.ts';
+import { SPORTS, type SportId } from './sport.ts';
 
 export type Phase = 'ready' | 'running' | 'paused' | 'over';
 export type PowerKind = 'wave' | 'gust';
@@ -19,7 +20,10 @@ export interface PowerUp {
   y: number;
 }
 
-export type PopupKind = 'trick' | 'close' | 'over' | 'dolphin';
+export type PopupKind = 'trick' | 'close' | 'over' | 'dolphin' | 'penalty';
+
+/** How a run ended. */
+export type EndReason = 'wipeout' | 'wave' | 'time' | 'finish';
 
 /** A short "+points" label rising over the athlete. */
 export interface Popup {
@@ -85,9 +89,23 @@ const POWER_ALTITUDE: Record<SportId, readonly [number, number]> = {
  * only decides where new obstacles appear.
  */
 export class Game {
-  readonly sport: SportId;
-  readonly cfg: RunConfig;
-  readonly athlete: Athlete;
+  sport: SportId;
+  cfg: RunConfig;
+  athlete: Athlete;
+  /** How this run is played. */
+  mode: RunMode = 'endless';
+  /** World tour: distance of the finish line, 0 for none. */
+  finishLine = 0;
+  endReason: EndReason = 'wipeout';
+  /** Seconds of stumbling after a fall (modes without wipeouts). */
+  stumble = 0;
+  /** Big wave: how far behind the athlete the wave is. */
+  waveGap = 0;
+  /** Big wave: seconds left of the push after a trick. */
+  boost = 0;
+  /** Triathlon: seconds into this sport, and sports done. */
+  legTime = 0;
+  legs = 0;
   phase: Phase = 'ready';
   /** Base speed of the run (before drag and boosts). */
   speed = 0;
@@ -134,16 +152,62 @@ export class Game {
   private readonly events: GameEvents;
   private readonly boxes = newBoxes();
   private readonly powerUps: boolean;
+  private readonly athletes: Partial<Record<SportId, Athlete>> = {};
 
   constructor(sport: SportId, best: number, events: GameEvents = {}, options: GameOptions = {}) {
     this.sport = sport;
     this.cfg = configFor(sport);
     this.athlete = createAthlete(sport);
+    this.athletes[sport] = this.athlete;
     this.obstacles = new Obstacles(obstaclesFor(sport));
     this.best = best;
     this.events = events;
     this.powerUps = options.powerUps ?? true;
     for (let i = 0; i < POPUPS; i++) this.popups.push({ active: false, kind: 'trick', points: 0, spins: 0, time: 0 });
+  }
+
+  /** Modes where a fall is not the end: you stumble and ride on. */
+  get soft(): boolean {
+    return this.mode === 'sixty' || this.mode === 'freeride' || this.mode === 'bigwave';
+  }
+
+  /** 60 seconds: time left. */
+  get timeLeft(): number {
+    return Math.max(0, MODES.sixty.time - this.time);
+  }
+
+  /**
+   * Changes sport. During a run (triathlon) the speed keeps its place in
+   * the new sport's range and the water ahead is cleared for a moment.
+   */
+  setSport(sport: SportId): void {
+    if (sport === this.sport) return;
+    const from = this.cfg;
+    const progress = from.maxSpeed > from.startSpeed ? (this.speed - from.startSpeed) / (from.maxSpeed - from.startSpeed) : 0;
+    this.sport = sport;
+    this.cfg = configFor(sport);
+    let a = this.athletes[sport];
+    if (!a) {
+      a = createAthlete(sport);
+      this.athletes[sport] = a;
+    }
+    this.athlete = a;
+    a.reset();
+    this.obstacles.setTable(obstaclesFor(sport));
+    const p = Math.min(1, Math.max(0, progress));
+    this.speed = this.effectiveSpeed = this.cfg.startSpeed + p * (this.cfg.maxSpeed - this.cfg.startSpeed);
+    this.obstacles.reset(this.cfg.firstGap, this.rng, this.speed);
+    this.power.active = false;
+    this.flow = 0;
+    this.gustTime = 0;
+    this.gustJump = false;
+  }
+
+  /** Sets the mode for the next start; `finishLine` is for the world tour. */
+  setMode(mode: RunMode, finishLine = 0): void {
+    this.mode = mode;
+    this.finishLine = finishLine;
+    this.dolphins.often = mode === 'freeride';
   }
 
   /** Wing foil distance multiplier from the flow meter. */
@@ -173,6 +237,7 @@ export class Game {
   }
 
   start(seed = (Math.random() * 0x7fffffff) | 0): void {
+    if (this.mode === 'triathlon') this.setSport('surf');
     this.phase = 'running';
     this.seed = seed;
     this.rng.seed(seed);
@@ -194,7 +259,14 @@ export class Game {
     this.power.active = false;
     this.athlete.reset();
     resetScore(this.score);
-    this.obstacles.reset(this.cfg.firstGap, this.rng, this.speed);
+    this.endReason = 'wipeout';
+    this.stumble = 0;
+    this.boost = 0;
+    this.legTime = 0;
+    this.legs = 0;
+    this.waveGap = MODES.bigwave.startGap;
+    // free ride: open water, nothing to dodge
+    this.obstacles.reset(this.mode === 'freeride' ? 1e12 : this.cfg.firstGap, this.rng, this.speed);
   }
 
   update(dt: number, pressed: boolean, held: boolean): void {
@@ -232,6 +304,11 @@ export class Game {
 
     let factor = a.speedFactor;
     if (this.gustTime > 0) factor *= WING.gustSpeed;
+    if (this.mode === 'bigwave') {
+      if (this.boost > 0) factor *= MODES.bigwave.boost;
+      if (this.stumble > 0) factor *= MODES.bigwave.stumbleSpeed;
+      this.boost = Math.max(0, this.boost - dt);
+    }
     this.effectiveSpeed = this.speed * factor;
     const dx = this.effectiveSpeed * dt;
     this.prevDistance = this.distance;
@@ -239,8 +316,19 @@ export class Game {
     const boosted = this.boosted;
     addDistance(this.score, dx, boosted, this.flowFactor);
 
+    if (this.endChecks(dt)) return;
+    if (this.stumble > 0) {
+      // down in the water for a moment, then back on the board, protected
+      this.stumble -= dt;
+      if (this.stumble <= 0) {
+        this.stumble = 0;
+        a.reset();
+        this.grace = MODES.stumble.grace;
+      }
+    }
+
     if (a instanceof WingAthlete) a.breachLimit = this.gustTime > 0 ? WING.gustBreach : WING.breach;
-    switch (a.update(dt, pressed, held)) {
+    switch (this.stumble > 0 ? 'none' : a.update(dt, pressed, held)) {
       case 'jump':
         this.events.onJump?.();
         break;
@@ -250,6 +338,7 @@ export class Game {
         st.tricks++;
         st.bestCombo = Math.max(st.bestCombo, this.score.combo);
         st.maxSpins = Math.max(st.maxSpins, a.spins);
+        if (this.mode === 'bigwave') this.boost = MODES.bigwave.boostTime;
         this.endGustJump();
         break;
       }
@@ -263,6 +352,8 @@ export class Game {
           a.recover();
           landPlain(this.score);
           this.endGustJump();
+        } else if (this.soft) {
+          this.fall();
         } else {
           this.wipeout();
           return;
@@ -288,6 +379,12 @@ export class Game {
           const box = this.boxes[b];
           if ((box.layers & k.layer) === 0) continue;
           if (overlaps(box.x, box.y, box.w, box.h, o.x + inset, o.y, k.w - 2 * inset, k.h - 1)) {
+            if (this.soft) {
+              // the obstacle is knocked away, the athlete goes down
+              o.active = false;
+              this.fall();
+              break;
+            }
             this.wipeout();
             return;
           }
@@ -308,6 +405,75 @@ export class Game {
         }
       }
     }
+  }
+
+  /**
+   * Ends set by the mode: time up, finish line, the wave, the next leg of
+   * the triathlon. True when the run ended this step.
+   */
+  private endChecks(dt: number): boolean {
+    switch (this.mode) {
+      case 'sixty':
+        if (this.time >= MODES.sixty.time) {
+          this.end('time');
+          return true;
+        }
+        break;
+      case 'tour':
+        if (this.finishLine > 0 && this.distance >= this.finishLine) {
+          this.end('finish');
+          return true;
+        }
+        break;
+      case 'bigwave': {
+        // the wave rolls at the base speed and creeps closer; you keep ahead with your own speed
+        const c = MODES.bigwave;
+        this.waveGap = Math.min(c.maxGap, this.waveGap + (this.effectiveSpeed - this.speed - c.creep) * dt);
+        if (this.waveGap <= 0) {
+          this.waveGap = 0;
+          this.wipeout('wave');
+          return true;
+        }
+        break;
+      }
+      case 'triathlon':
+        this.legTime += dt;
+        if (this.legTime >= MODES.triathlon.leg) {
+          this.legTime = 0;
+          this.legs++;
+          this.setSport(SPORTS[(SPORTS.indexOf(this.sport) + 1) % SPORTS.length]);
+          this.grace = MODES.triathlon.grace;
+        }
+        break;
+    }
+    return false;
+  }
+
+  /** A fall in the modes without wipeouts: down for a moment, combo lost, 60 seconds also loses time. */
+  private fall(): void {
+    if (this.stumble > 0) return;
+    this.stumble = MODES.stumble.time;
+    this.athlete.crash();
+    landPlain(this.score);
+    this.endGustJump();
+    if (this.mode === 'sixty') {
+      this.time += MODES.sixty.penalty;
+      this.popup('penalty', MODES.sixty.penalty);
+    }
+  }
+
+  /** The run reached its goal (time up, finish line). */
+  private end(reason: EndReason): void {
+    this.phase = 'over';
+    this.overTime = 0;
+    this.endReason = reason;
+    this.settle();
+    const final = this.points;
+    if (final > this.best) {
+      this.best = final;
+      this.newBest = true;
+    }
+    this.events.onGameOver?.(final, this.best);
   }
 
   private popup(kind: PopupKind, points: number, spins = 0): void {
@@ -466,9 +632,10 @@ export class Game {
     this.power.prevX = this.power.x;
   }
 
-  private wipeout(): void {
+  private wipeout(reason: EndReason = 'wipeout'): void {
     this.phase = 'over';
     this.overTime = 0;
+    this.endReason = reason;
     this.athlete.crash();
     this.settle();
     const final = this.points;

@@ -7,14 +7,16 @@ import type { DailyRecord } from '../custom/profile.ts';
 import type { AthleteState } from '../game/athletes.ts';
 import { dailySeed, dayKey } from '../game/daily.ts';
 import { GHOST_AIR, GHOST_CRASH, GHOST_RIDE, GhostTrack, newGhostSample } from '../game/ghost.ts';
-import { WING } from '../game/config.ts';
+import { MODES, WING } from '../game/config.ts';
+import { modeBestKey, type RunMode } from '../game/modes.ts';
+import { TOUR_SPOTS, starsFor } from '../game/tour.ts';
 import { Game, POPUP_TIME } from '../game/game.ts';
 import { nextMultiplier } from '../game/score.ts';
 import { SPORTS, type SportId } from '../game/sport.ts';
 import { t } from '../i18n/strings.ts';
 import { ADVANCE, GLYPH_H, digitCount } from '../render/font.ts';
 import { C } from '../render/palette.ts';
-import { HORIZON_ABOVE_SEA, inside, lerp, newRect, setRect, type PoseView } from '../render/renderer.ts';
+import { HORIZON_ABOVE_SEA, inside, lerp, newRect, setRect, type PoseView, type Sky } from '../render/renderer.ts';
 import { GEAR_COLORS } from '../sprites/ramps.ts';
 import type { AthleteSprites } from '../sprites/sheet.ts';
 import { sharePostcard } from './postcard.ts';
@@ -49,8 +51,10 @@ class GhostPose implements PoseView {
  * single button.
  */
 export class PlayScreen implements Screen {
-  /** Today's daily challenge instead of a random run (set before entering). */
-  daily = false;
+  /** How the next run is played (set before entering). */
+  mode: RunMode = 'endless';
+  /** World tour spot (set before entering a tour run). */
+  spot = 0;
   private dailyRecord: DailyRecord = { day: '', best: 0, ghost: '' };
   private newDailyBest = false;
   private readonly recording = new GhostTrack();
@@ -71,11 +75,14 @@ export class PlayScreen implements Screen {
   private lastCombo = 0;
   private sharing = false;
   private readonly shareRect = newRect();
-  private readonly games = {} as Record<SportId, Game>;
   private readonly rivalPool = {} as Record<SportId, AthleteSprites[]>;
   private readonly rivals: AthleteSprites[] = [];
   private readonly rng = new Rng((Date.now() & 0x7fffffff) || 7);
-  private game!: Game;
+  private readonly game: Game;
+  /** Banner shown when the triathlon changes sport. */
+  private legBanner = 0;
+  private lastSport: SportId = 'surf';
+  private tourStars = 0;
   private pressed = false;
   private lastPhase: Game['phase'] = 'ready';
   private readonly pauseRect = newRect();
@@ -87,13 +94,26 @@ export class PlayScreen implements Screen {
   constructor(ctx: Context) {
     this.ctx = ctx;
     this.result = { sport: 'surf', points: 0, daily: false, stats: { tricks: 0, bestCombo: 0, maxSpins: 0, closeCalls: 0, overs: 0, powerUps: 0, maxFlow: 0, dolphins: 0 } };
-    for (const sport of SPORTS) {
-      this.games[sport] = new Game(sport, ctx.profile.best[sport], {
-        onGameOver: (_score, best) => {
-          if (best > ctx.profile.best[sport]) ctx.profile.setBest(sport, best);
-        },
-      });
-    }
+    this.game = new Game('surf', 0);
+  }
+
+  get daily(): boolean {
+    return this.mode === 'daily';
+  }
+
+  /** Key of this mode's saved best, null when it keeps none. */
+  private get bestKey(): string | null {
+    return this.mode === 'endless' || this.mode === 'daily' ? null : modeBestKey(this.mode, this.game.sport);
+  }
+
+  /** The athlete's sprites for the sport being played (the triathlon changes it). */
+  private sprites(): AthleteSprites {
+    const p = this.ctx.profile;
+    return this.game.sport === p.sport ? this.ctx.player() : this.ctx.sprites(p.looks[this.game.sport][p.rider], this.game.sport);
+  }
+
+  private get sky(): Sky {
+    return this.mode === 'tour' ? TOUR_SPOTS[this.spot].sky : 'day';
   }
 
   get current(): Game {
@@ -101,14 +121,25 @@ export class PlayScreen implements Screen {
   }
 
   enter(): void {
-    const sport = this.ctx.profile.sport;
-    this.game = this.games[sport];
-    this.game.best = Math.max(this.game.best, this.ctx.profile.best[sport]);
-    this.prepareRivals(sport);
+    const p = this.ctx.profile;
+    const mode = this.mode;
+    const sport = mode === 'triathlon' ? 'surf' : mode === 'tour' ? TOUR_SPOTS[this.spot].sport : p.sport;
+    const g = this.game;
+    g.setMode(mode, mode === 'tour' ? TOUR_SPOTS[this.spot].finish : 0);
+    g.setSport(sport);
+    const key = this.bestKey;
+    g.best = mode === 'endless' ? p.best[sport] : key ? p.gameBest(`run.${key}`) : 0;
+    for (const s of SPORTS) if (mode === 'triathlon' || s === sport) this.prepareRivals(s);
+    this.lastSport = sport;
+    this.legBanner = 0;
     this.result.sport = sport;
     this.result.daily = this.daily;
-    this.result.stats = this.game.stats;
-    if (this.daily) {
+    this.result.stats = g.stats;
+    if (mode === 'tour') {
+      this.ghost.clear();
+      g.restartSeed = TOUR_SPOTS[this.spot].seed;
+      g.start(g.restartSeed);
+    } else if (this.daily) {
       // the same seed for everyone today; restarts replay it, and the ghost is today's best run
       const day = dayKey(new Date());
       const seed = dailySeed(day, sport);
@@ -123,7 +154,7 @@ export class PlayScreen implements Screen {
     }
     this.newRun();
     // first run of a sport: learn the controls by doing, shielded
-    if (!this.daily && !this.ctx.profile.tutorialDone.has(sport)) {
+    if (mode === 'endless' && !this.ctx.profile.tutorialDone.has(sport)) {
       this.tutorial.start(sport);
       this.game.shield = true;
     } else {
@@ -151,6 +182,8 @@ export class PlayScreen implements Screen {
 
   private newRun(): void {
     this.recording.clear();
+    this.tourStars = 0;
+    this.legBanner = 0;
     this.runMissions.length = 0;
     this.banner = null;
     this.bannerTime = 0;
@@ -159,6 +192,11 @@ export class PlayScreen implements Screen {
     this.shake = 0;
     this.comboFlash = 0;
     this.lastCombo = 0;
+    this.pickRivals();
+  }
+
+  /** Two of the prepared rival looks for the sport being played. */
+  private pickRivals(): void {
     const pool = this.rivalPool[this.game.sport];
     this.rivals.length = 0;
     if (!pool) return;
@@ -167,8 +205,9 @@ export class PlayScreen implements Screen {
     this.rivals.push(pool[a], pool[b]);
   }
 
+  /** Leaving a run goes back to where it was chosen: the tour map or the runner setup. */
   private home(): void {
-    this.ctx.go('home');
+    this.ctx.go(this.mode === 'tour' ? 'tour' : 'setup');
   }
 
   key(code: string): void {
@@ -240,9 +279,17 @@ export class PlayScreen implements Screen {
       this.shake = SHAKE_TIME;
     }
     if (this.lastPhase === 'over' && g.phase === 'running') this.newRun();
+    if (g.sport !== this.lastSport) {
+      // triathlon: next sport
+      this.lastSport = g.sport;
+      this.legBanner = 2;
+      this.pickRivals();
+    }
+    if (this.legBanner > 0) this.legBanner -= dt;
     if (g.phase === 'running' || (g.phase === 'over' && this.lastPhase === 'running')) {
       this.record();
-      this.checkMissions();
+      // a free ride has no stakes: it does not count for missions
+      if (this.mode !== 'freeride') this.checkMissions();
     }
     if (this.lastPhase === 'running' && g.phase === 'over') this.runEnded();
     this.lastPhase = g.phase;
@@ -266,9 +313,19 @@ export class PlayScreen implements Screen {
     this.bannerTime = BANNER_TIME;
   }
 
-  /** A daily run that beats today's best becomes the new ghost. */
+  /** Saves what the run earned: best score of the mode, tour stars, the daily ghost. */
   private runEnded(): void {
     const g = this.game;
+    const p = this.ctx.profile;
+    if (this.mode === 'endless' && g.points > p.best[g.sport]) p.setBest(g.sport, g.points);
+    const key = this.bestKey;
+    if (key && g.points > p.gameBest(`run.${key}`)) p.setGameBest(`run.${key}`, g.points);
+    if (this.mode === 'tour') {
+      const spot = TOUR_SPOTS[this.spot];
+      this.tourStars = starsFor(spot, g.points, g.endReason === 'finish');
+      p.setSpotStars(spot.id, this.tourStars);
+    }
+    // a daily run that beats today's best becomes the new ghost
     if (!this.daily || g.points <= this.dailyRecord.best) return;
     this.newDailyBest = true;
     this.dailyRecord.best = g.points;
@@ -283,7 +340,7 @@ export class PlayScreen implements Screen {
     const p = this.ctx.profile;
     this.sharing = true;
     sharePostcard(this.ctx.r, {
-      sprites: this.ctx.player(),
+      sprites: this.sprites(),
       sport: g.sport,
       rider: p.rider,
       points: g.points,
@@ -305,14 +362,17 @@ export class PlayScreen implements Screen {
     if (this.tutorial.frozen || this.hitStop > 0) alpha = 1;
     const distance = lerp(g.prevDistance, g.distance, alpha);
     this.frame++;
-    const shaking = this.shake > 0;
-    if (shaking) {
-      const amp = Math.ceil((3 * this.shake) / SHAKE_TIME);
+    r.backdrop(distance, this.sky);
+    // the world moves with the shake, and in big wave mode sits further right to leave room for the wave
+    const amp = this.shake > 0 ? Math.ceil((3 * this.shake) / SHAKE_TIME) : 0;
+    const dx = this.shift + (amp ? (((this.frame * 7) % 3) - 1 === 0 ? amp : -amp) : 0);
+    const dy = amp ? (((this.frame * 5) % 3) - 1 === 0 ? -amp : amp) : 0;
+    const moved = dx !== 0 || dy !== 0;
+    if (moved) {
       r.ctx.save();
-      r.ctx.translate(((this.frame * 7) % 3) - 1 === 0 ? amp : -amp, ((this.frame * 5) % 3) - 1 === 0 ? -amp : amp);
+      r.ctx.translate(dx, dy);
     }
 
-    r.backdrop(distance);
     if (g.perfectWave > 0) r.perfectWave(cfg.playerX, g.perfectWave < 1 && Math.floor(g.clock * 8) % 2 === 0);
     if (g.gustTime > 0 || g.gustJump) r.windLines(g.clock);
     r.dolphins(g.dolphins, cfg.playerX);
@@ -321,9 +381,10 @@ export class PlayScreen implements Screen {
     if (p.active) r.powerUp(p.kind, lerp(p.prevX, p.x, alpha), p.y, g.clock);
     this.drawGhost(distance, alpha);
     const blink = g.grace > 0 && Math.floor(g.clock * 12) % 2 === 1;
-    if (!blink) r.athlete(this.ctx.player(), sport, g.athlete, cfg.playerX, alpha, g.clock, 1, r.seaY, cfg.playerW);
+    if (!blink) r.athlete(this.sprites(), sport, g.athlete, cfg.playerX, alpha, g.clock, 1, r.seaY, cfg.playerW);
+    if (this.mode === 'bigwave') r.giantWave(this.waveFront(), g.clock);
+    if (moved) r.ctx.restore();
     r.surfaceFront(distance);
-    if (shaking) r.ctx.restore();
     this.hud();
     this.tutorialPrompt();
   }
@@ -378,7 +439,7 @@ export class PlayScreen implements Screen {
     pose.y = pose.prevY = s.y;
     pose.rotation = pose.prevRotation = s.rotation;
     pose.stateTime = after > 0 ? after : 1;
-    r.ghostAthlete(this.ctx.player(), g.sport, pose, x, g.clock, g.cfg.playerW);
+    r.ghostAthlete(this.sprites(), g.sport, pose, x, g.clock, g.cfg.playerW);
   }
 
   private hud(): void {
@@ -389,7 +450,9 @@ export class PlayScreen implements Screen {
     const margin = 6;
     const lineH = (GLYPH_H + 4) * u;
     const points = g.points;
-    r.scoreLine(points, this.daily ? this.dailyRecord.best : g.best, true);
+    // free ride keeps no score
+    if (this.mode !== 'freeride') r.scoreLine(points, this.daily ? this.dailyRecord.best : this.mode === 'tour' ? 0 : g.best, true);
+    if (g.phase === 'running') this.modeHud();
 
     // pause button, top-left
     const size = (GLYPH_H + 7) * u;
@@ -416,7 +479,12 @@ export class PlayScreen implements Screen {
       let newer = 0;
       for (let j = 0; j < g.popups.length; j++) if (g.popups[j].active && g.popups[j].time > q.time) newer++;
       const y = base - Math.round((POPUP_TIME - q.time) * 20) - newer * lineH;
-      const x = g.cfg.playerX;
+      const x = g.cfg.playerX + this.shift;
+      if (q.kind === 'penalty') {
+        // 60 seconds: a fall costs time
+        r.text(t.penalty, g.cfg.playerX, y, C.coral, u);
+        continue;
+      }
       const color = q.kind === 'trick' ? C.gold : q.kind === 'dolphin' ? C.sun : C.white;
       const digits = digitCount(q.points);
       r.text('+', x, y, color, u);
@@ -479,21 +547,28 @@ export class PlayScreen implements Screen {
       }
       case 'over': {
         const textH = (GLYPH_H + 3) * u;
-        const newBest = this.daily ? this.newDailyBest : g.newBest;
+        const newBest = this.daily ? this.newDailyBest : this.mode === 'tour' || this.mode === 'freeride' ? false : g.newBest;
+        const tour = this.mode === 'tour';
         const missions = this.runMissions.length > 0;
         // a smaller title when the screen is short
         // everything but the title, then the title at 2u, or at u when the screen is short
-        const rest = textH + u + (GLYPH_H + 4) * 2 * u + (newBest ? textH : 0) + (this.daily ? textH : 0) + (missions ? textH + 2 * u : 0) + 2 * u + (GLYPH_H + 7) * u;
+        const rest = textH + u + (GLYPH_H + 4) * 2 * u + (newBest ? textH : 0) + (this.daily ? textH : 0) + (tour ? 16 * u : 0) + (missions ? textH + 2 * u : 0) + 2 * u + (GLYPH_H + 7) * u;
         const title = (GLYPH_H + 3) * 2 * u + rest > r.H - row2 - lineH - margin ? u : 2 * u;
         const blockH = (GLYPH_H + 3) * title + rest;
         let oy = Math.max(row2 + lineH, Math.min(mid - 36 * u, r.H - margin - blockH));
-        oy += r.centered(t.wipeout, W / 2, oy, C.white, title);
-        const who = WHO[this.ctx.profile.rider][g.sport];
+        const reason = g.endReason;
+        const heading = reason === 'time' ? t.timeUp : reason === 'finish' ? t.tourFinish : reason === 'wave' ? t.waveCaught : t.wipeout;
+        oy += r.centered(heading, W / 2, oy, C.white, title);
+        const who = tour ? TOUR_SPOTS[this.spot].name : WHO[this.ctx.profile.rider][g.sport];
         oy += r.centered(who, W / 2, oy, C.skyPale, u) + u;
         const scoreDigits = digitCount(points);
         r.number(points, scoreDigits, Math.floor((W - r.font.widthOf(scoreDigits, 2 * u)) / 2), oy, C.sun, 2 * u);
         oy += (GLYPH_H + 4) * 2 * u;
         if (newBest) oy += r.centered(t.newBest, W / 2, oy, C.gold, u);
+        if (tour) {
+          r.stars(W / 2, oy, this.tourStars, 2 * u);
+          oy += 16 * u;
+        }
         if (this.daily) {
           // "DAILY BEST 01234"
           const digits = Math.max(5, digitCount(this.dailyRecord.best));
@@ -527,6 +602,72 @@ export class PlayScreen implements Screen {
     }
   }
 
+  /** Big wave mode draws the world this much to the right, so the wave has room behind the athlete. */
+  private get shift(): number {
+    return this.mode === 'bigwave' ? 64 : 0;
+  }
+
+  /** Where the giant wave's front is drawn (world x): reaching the athlete at a gap of 0. */
+  private waveFront(): number {
+    return this.game.cfg.playerX - 6 - Math.round(this.game.waveGap * 0.45);
+  }
+
+  /** What each mode adds to the HUD: time left, leg, finish line, the banner of a new sport. */
+  private modeHud(): void {
+    const { r } = this.ctx;
+    const g = this.game;
+    const u = r.u;
+    const top = 6 + (GLYPH_H + 4) * u * 2;
+    switch (this.mode) {
+      case 'sixty': {
+        // big seconds left, red in the last ten
+        const left = Math.ceil(g.timeLeft);
+        const scale = 3 * u;
+        const digits = digitCount(left);
+        r.number(left, digits, Math.round((r.W - r.font.widthOf(digits, scale)) / 2), top, left <= 10 ? C.coral : C.white, scale);
+        break;
+      }
+      case 'triathlon': {
+        // sport of this leg and how far into it
+        const name = t.sports[g.sport];
+        r.centered(name, r.W / 2, top, C.sun, u);
+        const full = 60 * u;
+        const x = Math.round((r.W - full) / 2);
+        const y = top + (GLYPH_H + 3) * u;
+        r.fill(C.navy, x, y, full, 2 * u + 1);
+        r.fill(C.sun, x, y, Math.round((g.legTime / MODES.triathlon.leg) * full), 2 * u);
+        break;
+      }
+      case 'tour': {
+        // spot name and the way to the finish line
+        const spot = TOUR_SPOTS[this.spot];
+        r.centered(spot.name, r.W / 2, top, C.sun, u);
+        const full = 80 * u;
+        const x = Math.round((r.W - full) / 2);
+        const y = top + (GLYPH_H + 3) * u;
+        r.fill(C.navy, x, y, full, 2 * u + 1);
+        r.fill(C.white, x, y, Math.round(Math.min(1, g.distance / spot.finish) * full), 2 * u);
+        r.fill(C.gold, x + full - u, y - u, u, 2 * u + 3);
+        break;
+      }
+      case 'bigwave': {
+        // how far the wave is
+        const full = 50 * u;
+        const x = 6 + (GLYPH_H + 7) * u + 6 * u;
+        const y = 6 + 2 * u;
+        const k = g.waveGap / MODES.bigwave.maxGap;
+        r.text(t.modes.bigwave.name, x, y, k < 0.3 ? C.coral : C.white, u);
+        const bx = x + r.font.width(t.modes.bigwave.name, u) + 3 * u;
+        r.fill(C.navy, bx, y, full + 2, GLYPH_H * u);
+        r.fill(k < 0.3 ? C.coral : C.aqua, bx + 1, y + 1, Math.round(k * full), GLYPH_H * u - 2);
+        break;
+      }
+    }
+    if (this.legBanner > 0 && Math.floor(this.legBanner * 6) % 2 === 0) {
+      r.centered(t.leg[g.sport], r.W / 2, Math.round((r.seaY - HORIZON_ABOVE_SEA) / 2), C.white, 3 * u);
+    }
+  }
+
   /** "MISSION COMPLETE!" and the mission, on a panel, during the run. */
   private missionBanner(y: number): void {
     const { r } = this.ctx;
@@ -552,12 +693,12 @@ export class PlayScreen implements Screen {
     const { r } = this.ctx;
     const u = r.u;
     const h = (GLYPH_H + 7) * u;
-    const w = Math.max(r.font.width(primary, u), r.font.width(t.home, u), r.font.width(t.share, u)) + 12 * u;
+    const w = Math.max(r.font.width(primary, u), r.font.width(t.back, u), r.font.width(t.share, u)) + 12 * u;
     const gap = 4 * u;
     const total = (share ? 3 : 2) * w + (share ? 2 : 1) * gap;
     const x = Math.round((r.W - total) / 2);
     r.button(setRect(this.leftRect, x, y, w, h), primary, 'primary', u);
-    r.button(setRect(this.rightRect, x + w + gap, y, w, h), t.home, 'normal', u);
+    r.button(setRect(this.rightRect, x + w + gap, y, w, h), t.back, 'normal', u);
     if (share) r.button(setRect(this.shareRect, x + 2 * (w + gap), y, w, h), t.share, 'normal', u);
   }
 }

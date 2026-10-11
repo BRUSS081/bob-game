@@ -158,6 +158,20 @@ export const FLOW = {
   maxFactor: 3,
 } as const;
 
+/** Tuning of the runner modes. */
+export const MODES = {
+  /** 60 seconds: no wipeouts, a fall costs the combo and time. */
+  sixty: { time: 60, penalty: 2 },
+  /** Falls in the modes without wipeouts: seconds down, then protection. */
+  stumble: { time: 0.6, grace: 1 },
+  /** Big wave: the wave starts this far behind, creeps closer, a trick pushes you ahead. */
+  bigwave: { startGap: 160, maxGap: 240, creep: 6, boost: 1.3, boostTime: 1.2, stumbleSpeed: 0.5 },
+  /** Triathlon: seconds per sport. */
+  triathlon: { leg: 40, grace: 1.5 },
+  /** Free ride: dolphins come by more often. */
+  freeride: { dolphinWait: [6, 12] as const },
+} as const;
+
 /**
  * Where obstacles appear, in game pixels from the left edge: past the widest
  * view, the same on every screen, so a seed always plays the same run.

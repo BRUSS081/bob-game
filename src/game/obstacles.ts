@@ -142,7 +142,7 @@ export interface SpawnInfo {
 export class Obstacles {
   readonly items: Obstacle[];
   readonly lastSpawn: SpawnInfo = { spawned: false, groupEnd: 0, gap: 0 };
-  private readonly table: readonly ObstacleKind[];
+  private table: readonly ObstacleKind[];
   private untilNext = 0;
   private next: ObstacleKind;
   section: Section = 'normal';
@@ -156,6 +156,12 @@ export class Obstacles {
     for (let i = 0; i < capacity; i++) {
       this.items.push({ active: false, kind: table[0], x: 0, prevX: 0, y: 0, closest: Infinity, over: false, passed: false, hop: -1, hopped: false });
     }
+  }
+
+  /** Switches to another sport's obstacles; call reset after. */
+  setTable(table: readonly ObstacleKind[]): void {
+    this.table = table;
+    for (let i = 0; i < this.items.length; i++) this.items[i].active = false;
   }
 
   reset(firstGap: number, rng?: Rng, speed = 0): void {

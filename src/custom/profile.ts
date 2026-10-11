@@ -1,5 +1,7 @@
 import { load, save } from '../core/storage.ts';
+import { isRunMode, type RunMode } from '../game/modes.ts';
 import { SPORTS, isSport, type SportId } from '../game/sport.ts';
+import { isGameId, type GameId } from '../games/registry.ts';
 import { BODY_KEYS, CHARACTERS, defaultConfig, sanitize, type AthleteConfig, type CharacterId, type Unlocked } from './athlete.ts';
 
 type PerSport<T> = Record<SportId, T>;
@@ -20,8 +22,14 @@ export interface DailyRecord {
 export class Profile {
   sport: SportId;
   rider: CharacterId;
+  /** Game shown on the home carousel. */
+  game: GameId;
+  /** Last runner mode chosen. */
+  mode: RunMode;
   readonly looks: PerSport<Record<CharacterId, AthleteConfig>>;
   readonly best: PerSport<number>;
+  private readonly bests = new Map<string, number>();
+  private readonly tour = new Map<string, number>();
   /** Sports whose first-run tutorial is done. */
   readonly tutorialDone = new Set<SportId>();
 
@@ -29,6 +37,10 @@ export class Profile {
     const sport = load<unknown>('bob.sport', 'surf');
     this.sport = isSport(sport) ? sport : 'surf';
     this.rider = load<unknown>('bob.rider', 'bob') === 'bobba' ? 'bobba' : 'bob';
+    const game = load<unknown>('bob.game', 'runner');
+    this.game = isGameId(game) ? game : 'runner';
+    const mode = load<unknown>('bob.mode', 'endless');
+    this.mode = isRunMode(mode) ? mode : 'endless';
     this.looks = {} as PerSport<Record<CharacterId, AthleteConfig>>;
     this.best = {} as PerSport<number>;
     for (const s of SPORTS) {
@@ -41,6 +53,12 @@ export class Profile {
       this.looks[s] = looks;
       const b = load<unknown>(`bob.best.${s}`, 0);
       this.best[s] = typeof b === 'number' && Number.isFinite(b) && b > 0 ? Math.floor(b) : 0;
+    }
+    const tour = load<unknown>('bob.tour', {});
+    if (typeof tour === 'object' && tour !== null) {
+      for (const [id, v] of Object.entries(tour as Record<string, unknown>)) {
+        if (typeof v === 'number' && v >= 1 && v <= 3) this.tour.set(id, Math.floor(v));
+      }
     }
     const done = load<unknown>('bob.tutorial', []);
     if (Array.isArray(done)) for (const s of done) if (isSport(s)) this.tutorialDone.add(s);
@@ -66,6 +84,16 @@ export class Profile {
   setSport(sport: SportId): void {
     this.sport = sport;
     save('bob.sport', sport);
+  }
+
+  setGame(game: GameId): void {
+    this.game = game;
+    save('bob.game', game);
+  }
+
+  setMode(mode: RunMode): void {
+    this.mode = mode;
+    save('bob.mode', mode);
   }
 
   setRider(character: CharacterId): void {
@@ -98,6 +126,40 @@ export class Profile {
   finishTutorial(sport: SportId): void {
     this.tutorialDone.add(sport);
     save('bob.tutorial', [...this.tutorialDone]);
+  }
+
+  /** Stars of a world tour spot, 0 to 3. */
+  spotStars(id: string): number {
+    return this.tour.get(id) ?? 0;
+  }
+
+  /** Keeps the best star count of a spot. */
+  setSpotStars(id: string, stars: number): void {
+    if (stars <= this.spotStars(id)) return;
+    this.tour.set(id, stars);
+    save('bob.tour', Object.fromEntries(this.tour));
+  }
+
+  tourStars(): number {
+    let n = 0;
+    for (const v of this.tour.values()) n += v;
+    return n;
+  }
+
+  /** Best score of any game or runner mode, by key ("sixty.surf", "fishing"...). */
+  gameBest(key: string): number {
+    let v = this.bests.get(key);
+    if (v === undefined) {
+      const raw = load<unknown>(`bob.best.${key}`, 0);
+      v = typeof raw === 'number' && Number.isFinite(raw) && raw > 0 ? raw : 0;
+      this.bests.set(key, v);
+    }
+    return v;
+  }
+
+  setGameBest(key: string, value: number): void {
+    this.bests.set(key, value);
+    save(`bob.best.${key}`, value);
   }
 
   setBest(sport: SportId, best: number): void {

@@ -1,38 +1,41 @@
 import { CHARACTERS } from '../custom/athlete.ts';
-import { cycleSport } from '../game/sport.ts';
+import { GAME_IDS, LOWER_IS_BETTER, type GameId } from '../games/registry.ts';
 import { t } from '../i18n/strings.ts';
-import { GLYPH_H } from '../render/font.ts';
+import { ADVANCE, GLYPH_H, digitCount } from '../render/font.ts';
 import { C } from '../render/palette.ts';
-import { inside, newRect, setRect } from '../render/renderer.ts';
+import { inside, newRect, setRect, type Rect } from '../render/renderer.ts';
+import { ICON, type IconName } from '../sprites/icons.ts';
 import { DemoPilot, type Context, type Screen } from './screen.ts';
 
-/** Focusable rows, top to bottom. */
-const SPORT = 0;
-const RIDER = 1;
-const PLAY = 2;
-/** DAILY and MISSIONS, side by side. */
-const EXTRA = 3;
-const CUSTOMIZE = 4;
-const ROWS = 5;
+/** Focus rows for the keyboard, top to bottom. */
+const CAROUSEL = 0;
+const PLAY = 1;
+const BOTTOM = 2;
+const RIDER = 3;
+const ROWS = 4;
+const BOTTOM_ITEMS: readonly { icon: IconName; label: 'look' | 'missions' | 'album' }[] = [
+  { icon: 'look', label: 'look' },
+  { icon: 'missions', label: 'missions' },
+  { icon: 'album', label: 'album' },
+];
 
 /**
- * Title screen: pick the sport and BOB or BOBBA, then play or customize.
- * The chosen athlete rides by in the background.
+ * Title screen, kept simple: one game at a time on a carousel, one PLAY,
+ * and three small buttons below (look, missions, album). BOB or BOBBA is
+ * a chip in the corner. The chosen athlete rides by in the background.
  */
 export class HomeScreen implements Screen {
   private focus = PLAY;
-  /** Column in the EXTRA row: 0 daily, 1 missions. */
   private col = 0;
   private clock = 0;
   private distance = 0;
   private readonly pilot = new DemoPilot();
   private readonly prev = newRect();
   private readonly next = newRect();
-  private readonly riders = [newRect(), newRect()];
+  private readonly card = newRect();
   private readonly play = newRect();
-  private readonly daily = newRect();
-  private readonly missions = newRect();
-  private readonly custom = newRect();
+  private readonly rider = newRect();
+  private readonly bottom: Rect[] = BOTTOM_ITEMS.map(newRect);
   private readonly ctx: Context;
 
   constructor(ctx: Context) {
@@ -47,33 +50,31 @@ export class HomeScreen implements Screen {
 
   blur(): void {}
 
-  private changeSport(step: number): void {
+  private get game(): GameId {
+    return this.ctx.profile.game;
+  }
+
+  private changeGame(step: number): void {
+    const i = GAME_IDS.indexOf(this.game);
+    this.ctx.profile.setGame(GAME_IDS[(i + step + GAME_IDS.length) % GAME_IDS.length]);
+  }
+
+  private toggleRider(): void {
     const p = this.ctx.profile;
-    p.setSport(cycleSport(p.sport, step));
-    this.ctx.demo(p.sport).reset();
-    this.pilot.reset();
+    p.setRider(CHARACTERS[(CHARACTERS.indexOf(p.rider) + 1) % CHARACTERS.length]);
     this.ctx.changed();
   }
 
-  private changeRider(index: number): void {
-    const p = this.ctx.profile;
-    p.setRider(CHARACTERS[(index + CHARACTERS.length) % CHARACTERS.length]);
-    this.ctx.changed();
+  private launch(): void {
+    if (this.game === 'runner') this.ctx.go('setup');
+    else this.ctx.go(this.game);
   }
 
-  private activate(): void {
-    const p = this.ctx.profile;
-    if (this.focus === SPORT) this.changeSport(1);
-    else if (this.focus === RIDER) this.changeRider(CHARACTERS.indexOf(p.rider) + 1);
-    else if (this.focus === PLAY) this.ctx.play(false);
-    else if (this.focus === EXTRA) {
-      if (this.col === 0) this.ctx.play(true);
-      else this.ctx.go('missions');
-    } else this.ctx.go('customize');
+  private openBottom(i: number): void {
+    this.ctx.go(i === 0 ? 'customize' : i === 1 ? 'missions' : 'album');
   }
 
   key(code: string): void {
-    const p = this.ctx.profile;
     switch (code) {
       case 'ArrowUp':
         this.focus = (this.focus + ROWS - 1) % ROWS;
@@ -85,28 +86,34 @@ export class HomeScreen implements Screen {
       case 'ArrowLeft':
       case 'ArrowRight': {
         const step = code === 'ArrowLeft' ? -1 : 1;
-        if (this.focus === SPORT) this.changeSport(step);
-        else if (this.focus === RIDER) this.changeRider(CHARACTERS.indexOf(p.rider) + step);
-        else if (this.focus === EXTRA) this.col = 1 - this.col;
+        if (this.focus === CAROUSEL || this.focus === PLAY) this.changeGame(step);
+        else if (this.focus === BOTTOM) this.col = (this.col + step + BOTTOM_ITEMS.length) % BOTTOM_ITEMS.length;
+        else this.toggleRider();
         break;
       }
       case 'Space':
       case 'Enter':
-        this.activate();
+        if (this.focus === BOTTOM) this.openBottom(this.col);
+        else if (this.focus === RIDER) this.toggleRider();
+        else this.launch();
         break;
     }
   }
 
   tap(x: number, y: number): boolean {
-    if (inside(this.prev, x, y)) this.changeSport(-1);
-    else if (inside(this.next, x, y)) this.changeSport(1);
-    else if (inside(this.riders[0], x, y)) this.changeRider(0);
-    else if (inside(this.riders[1], x, y)) this.changeRider(1);
-    else if (inside(this.play, x, y)) this.ctx.play(false);
-    else if (inside(this.daily, x, y)) this.ctx.play(true);
-    else if (inside(this.missions, x, y)) this.ctx.go('missions');
-    else if (inside(this.custom, x, y)) this.ctx.go('customize');
-    else return false;
+    if (inside(this.prev, x, y)) this.changeGame(-1);
+    else if (inside(this.next, x, y)) this.changeGame(1);
+    else if (inside(this.play, x, y) || inside(this.card, x, y)) this.launch();
+    else if (inside(this.rider, x, y)) this.toggleRider();
+    else {
+      for (let i = 0; i < this.bottom.length; i++) {
+        if (inside(this.bottom[i], x, y)) {
+          this.openBottom(i);
+          return true;
+        }
+      }
+      return false;
+    }
     return true;
   }
 
@@ -121,64 +128,110 @@ export class HomeScreen implements Screen {
     const { W, H, u, seaY } = r;
     const sport = profile.sport;
     const landscape = W >= H * 1.25;
+    const margin = 6;
 
     r.backdrop(this.distance);
     const demo = this.ctx.demo(sport);
-    const athleteX = landscape ? Math.round(W * 0.2) : Math.round(W / 2 - 8);
+    const athleteX = landscape ? Math.round(W * 0.16) : Math.round(W / 2 - 8);
     r.athlete(this.ctx.player(), sport, demo, athleteX, alpha, this.clock);
     r.surfaceFront(this.distance);
-    r.scoreLine(0, profile.best[sport], false);
 
-    // menu block: title, sport, rider, play, daily + missions, customize
+    // BOB / BOBBA chip, top-left
+    const chipW = r.font.width(t.characters.bobba, u) + 10 * u;
     const rowH = (GLYPH_H + 7) * u;
-    const margin = 6;
-    const top = margin + (GLYPH_H + 4) * u;
-    let title = 4 * u;
-    let gap = 4 * u;
-    // shrink the title, then the gaps, until the menu fits above the sea (or at least on screen)
-    if (menuHeight(title, gap, rowH) > seaY - top - 4) title = 3 * u;
-    if (menuHeight(title, gap, rowH) > H - top - margin) title = 2 * u;
-    if (menuHeight(title, gap, rowH) > H - top - margin) gap = 2 * u;
-    const block = menuHeight(title, gap, rowH);
-    const cx = landscape ? Math.round(W * 0.64) : Math.round(W / 2);
-    let y = Math.max(top, Math.min(Math.round((seaY - block) / 2), H - block - margin));
+    r.button(setRect(this.rider, margin, margin, chipW, rowH), t.characters[profile.rider], 'selected', u, this.focus === RIDER);
+    this.drawBest(margin);
+
+    // the block: title, card (arrows, icon, name, tagline, dots), play, bottom row
+    const gap = 4 * u;
+    const iconScale = 3 * u;
+    const nameScale = 2 * u;
+    // the card keeps one size for every game: room for a two-line tagline
+    const cardW = Math.min(W - 2 * margin - 2 * (12 * u + gap), 150 * u);
+    const tagline = t.games[this.game].tagline;
+    const tagH = 2 * (GLYPH_H + 3) * u;
+    const cardH = ICON * iconScale + 4 * u + (GLYPH_H + 3) * nameScale + tagH + 8 * u;
+    const rest = 2 * gap + cardH + gap + rowH + 2 * gap + rowH;
+    const top = margin + rowH + gap;
+    const title = GLYPH_H * 3 * u + rest > H - top - margin ? 2 * u : 3 * u;
+    const block = GLYPH_H * title + rest;
+    const cx = landscape ? Math.round(W * 0.62) : Math.round(W / 2);
+    let y = Math.max(top, Math.min(Math.round((seaY - block) / 2) + gap, H - block - margin));
 
     r.centered(t.title, cx, y, C.white, title);
-    y += GLYPH_H * title + 3 * gap;
+    y += GLYPH_H * title + 2 * gap;
 
-    // < SPORT >
+    // card with arrows on its sides
     const arrowW = 12 * u;
-    const nameW = r.font.width(t.sports.wing, u) + 8 * u;
-    setRect(this.prev, cx - nameW / 2 - arrowW - u, y, arrowW, rowH);
-    setRect(this.next, cx + nameW / 2 + u, y, arrowW, rowH);
-    r.panel(setRect(scratch, cx - nameW / 2, y, nameW, rowH), this.focus === SPORT ? C.indigo : C.navy);
-    if (this.focus === SPORT) r.fill(C.white, scratch.x, scratch.y + scratch.h, scratch.w, 1);
-    r.centered(t.sports[sport], cx, y + Math.round((rowH - GLYPH_H * u) / 2), C.sun, u);
+    setRect(this.card, cx - cardW / 2, y, cardW, cardH);
+    r.panel(this.card, this.focus === CAROUSEL ? C.indigo : C.navy);
+    setRect(this.prev, this.card.x - gap - arrowW, y + cardH / 2 - rowH / 2, arrowW, rowH);
+    setRect(this.next, this.card.x + cardW + gap, y + cardH / 2 - rowH / 2, arrowW, rowH);
     r.arrowButton(this.prev, -1, u);
     r.arrowButton(this.next, 1, u);
-    y += rowH + gap;
-
-    // [BOB] [BOBBA], then the other rows on the same two-column grid
-    const riderW = Math.max(r.font.width(t.characters.bobba, u), r.font.width(t.missions, u), r.font.width(t.daily, u)) + 8 * u;
-    const rider = profile.rider;
-    for (let i = 0; i < CHARACTERS.length; i++) {
-      const rect = setRect(this.riders[i], i === 0 ? cx - riderW - u : cx + u, y, riderW, rowH);
-      r.button(rect, t.characters[CHARACTERS[i]], CHARACTERS[i] === rider ? 'selected' : 'normal', u, this.focus === RIDER && CHARACTERS[i] === rider);
+    let cy = y + 4 * u;
+    r.icon(this.game, cx - (ICON * iconScale) / 2, cy, iconScale);
+    cy += ICON * iconScale + 4 * u;
+    cy += r.centered(t.games[this.game].name, cx, cy, C.sun, nameScale);
+    r.centered(tagline, cx, cy, C.white, u, cardW - 8 * u);
+    // page dots
+    const dot = u;
+    const dotsW = GAME_IDS.length * 3 * dot;
+    const gi = GAME_IDS.indexOf(this.game);
+    for (let i = 0; i < GAME_IDS.length; i++) {
+      r.fill(i === gi ? C.white : C.indigo, Math.round(cx - dotsW / 2 + i * 3 * dot), y + cardH - 3 * dot, 2 * dot, dot);
     }
-    y += rowH + gap;
+    y += cardH + gap;
 
-    const wide = Math.max(r.font.width(t.customize, u) + 12 * u, 2 * riderW + 2 * u);
-    r.button(setRect(this.play, cx - wide / 2, y, wide, rowH), t.play, 'primary', u, this.focus === PLAY);
-    y += rowH + gap;
-    r.button(setRect(this.daily, cx - riderW - u, y, riderW, rowH), t.daily, 'normal', u, this.focus === EXTRA && this.col === 0);
-    r.button(setRect(this.missions, cx + u, y, riderW, rowH), t.missions, 'normal', u, this.focus === EXTRA && this.col === 1);
-    y += rowH + gap;
-    r.button(setRect(this.custom, cx - wide / 2, y, wide, rowH), t.customize, 'normal', u, this.focus === CUSTOMIZE);
+    const playW = Math.min(cardW, r.font.width(t.play, u) + 40 * u);
+    r.button(setRect(this.play, cx - playW / 2, y, playW, rowH), t.play, 'primary', u, this.focus === PLAY);
+    y += rowH + 2 * gap;
+
+    // small buttons: icon and short label
+    const bw = Math.max(r.font.width(t.missions, u) + ICON * u + 8 * u, 0);
+    const totalW = BOTTOM_ITEMS.length * bw + (BOTTOM_ITEMS.length - 1) * gap;
+    const scale = totalW > W - 2 * margin ? 0 : 1;
+    const itemW = scale ? bw : Math.floor((W - 2 * margin - (BOTTOM_ITEMS.length - 1) * gap) / BOTTOM_ITEMS.length);
+    const startX = Math.round(cx - (BOTTOM_ITEMS.length * itemW + (BOTTOM_ITEMS.length - 1) * gap) / 2);
+    // labels show only when every one of them fits, so the three buttons always look alike
+    const iconS = Math.max(1, Math.floor((rowH - 2 * u) / ICON));
+    let fits = true;
+    for (let i = 0; i < BOTTOM_ITEMS.length; i++) {
+      if (ICON * iconS + 3 * u + r.font.width(t[BOTTOM_ITEMS[i].label], u) > itemW - 4 * u) fits = false;
+    }
+    for (let i = 0; i < BOTTOM_ITEMS.length; i++) {
+      const rect = setRect(this.bottom[i], startX + i * (itemW + gap), y, itemW, rowH);
+      r.button(rect, '', 'normal', u, this.focus === BOTTOM && this.col === i);
+      const label = t[BOTTOM_ITEMS[i].label];
+      const contentW = ICON * iconS + 3 * u + r.font.width(label, u);
+      const ix = fits ? rect.x + (itemW - contentW) / 2 : rect.x + (itemW - ICON * iconS) / 2;
+      r.icon(BOTTOM_ITEMS[i].icon, ix, rect.y + (rowH - ICON * iconS) / 2, iconS);
+      if (fits) r.text(label, ix + ICON * iconS + 3 * u, rect.y + Math.round((rowH - GLYPH_H * u) / 2), C.white, u);
+    }
   }
-}
 
-const scratch = newRect();
-
-function menuHeight(title: number, gap: number, rowH: number): number {
-  return GLYPH_H * title + 3 * gap + ROWS * (rowH + gap);
+  /** Best score of the selected game, top-right. */
+  private drawBest(margin: number): void {
+    const { r, profile } = this.ctx;
+    const u = r.u;
+    const adv = ADVANCE * u;
+    const best = this.game === 'runner' ? profile.best[profile.sport] : profile.gameBest(this.game);
+    if (best <= 0 || this.game === 'aquarium') return;
+    const right = r.W - margin;
+    let x: number;
+    if (LOWER_IS_BETTER.has(this.game)) {
+      const cents = Math.round(best * 100);
+      const whole = Math.floor(cents / 100);
+      const wd = Math.max(2, digitCount(whole));
+      x = right - (wd + 3) * adv + u;
+      r.number(whole, wd, x, margin, C.skyPale, u);
+      r.text('.', x + wd * adv, margin, C.skyPale, u);
+      r.number(cents % 100, 2, x + (wd + 1) * adv, margin, C.skyPale, u);
+    } else {
+      const digits = Math.max(5, digitCount(best));
+      x = right - digits * adv + u;
+      r.number(best, digits, x, margin, C.skyPale, u);
+    }
+    r.text(t.hi, x - 3 * adv, margin, C.skyPale, u);
+  }
 }

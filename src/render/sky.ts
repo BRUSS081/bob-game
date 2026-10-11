@@ -24,6 +24,10 @@ export interface SkyColors {
   mid: number;
   deep: number;
   stars: boolean;
+  /** Haze over the horizon, a thin last band of the sky. */
+  haze: number;
+  /** Dithered glow around the sun. */
+  halo: number;
   /** Sun or moon. */
   orb: number;
   /** The sun's or moon's light on the water. */
@@ -44,8 +48,10 @@ export const SKIES: Record<Sky, SkyColors> = {
     mid: C.teal,
     deep: C.deep,
     stars: false,
-    orb: C.sun,
+    orb: C.gold,
     glitter: C.sun,
+    haze: C.white,
+    halo: C.sun,
     clouds: [C.sun, C.rose, C.mauve],
   },
   day: {
@@ -61,6 +67,8 @@ export const SKIES: Record<Sky, SkyColors> = {
     stars: false,
     orb: C.sun,
     glitter: C.white,
+    haze: C.mist,
+    halo: C.skyPale,
     clouds: [C.white, C.mist, C.skyLight],
   },
   sunset: {
@@ -76,6 +84,8 @@ export const SKIES: Record<Sky, SkyColors> = {
     stars: false,
     orb: C.gold,
     glitter: C.gold,
+    haze: C.gold,
+    halo: C.gold,
     clouds: [C.mauve, C.violet, C.orange],
   },
   night: {
@@ -91,6 +101,8 @@ export const SKIES: Record<Sky, SkyColors> = {
     stars: true,
     orb: C.mist,
     glitter: C.silver,
+    haze: C.indigo,
+    halo: C.indigo,
     clouds: [C.slate, C.indigo, C.navy],
   },
 };
@@ -201,8 +213,9 @@ export class SkyCanvas {
   get(sky: Sky, grey: boolean, w: number, h: number): HTMLCanvasElement {
     if (this.canvas && sky === this.sky && grey === this.grey && w === this.w && h === this.h) return this.canvas;
     const r = new Raster(Math.max(1, w), Math.max(1, h));
-    const bands = grey ? GREY_BANDS[sky] : SKIES[sky].bands;
-    r.bands(0, h, bands, 4, [1.1, 1.2, 1.1, 0.9]);
+    // long ordered-dither seams between the bands, and a thin haze on the horizon in clear weather
+    if (grey) r.bands(0, h, GREY_BANDS[sky], 8, [1.1, 1.2, 1.1, 0.9]);
+    else r.bands(0, h, [...SKIES[sky].bands, SKIES[sky].haze], 8, [1.1, 1.2, 1.1, 0.9, 0.28]);
     this.canvas = this.toCanvas(r);
     this.sky = sky;
     this.grey = grey;
@@ -252,8 +265,40 @@ export class FogCanvas {
 /** Rows of mist below the horizon, over the far sea. */
 export const FOG_BELOW = 30;
 
+/** The glow around the sun: ordered dither thinning out from the center, per sky and radius. */
+export class GlowCanvas {
+  private readonly cache = new Map<number, HTMLCanvasElement>();
+  private readonly toCanvas: (r: Raster) => HTMLCanvasElement;
+
+  constructor(toCanvas: (r: Raster) => HTMLCanvasElement) {
+    this.toCanvas = toCanvas;
+  }
+
+  get(sky: Sky, radius: number): HTMLCanvasElement {
+    const key = radius * 8 + SKY_INDEX[sky];
+    let c = this.cache.get(key);
+    if (!c) {
+      const size = radius * 2 + 1;
+      const r = new Raster(size, size);
+      const color = SKIES[sky].halo;
+      for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+          const d = Math.hypot(x - radius, y - radius) / radius;
+          if (d >= 1) continue;
+          r.dither(x, y, 1, 1, 0, color, Math.round(12 * Math.pow(1 - d, 1.7)));
+        }
+      }
+      c = this.toCanvas(r);
+      this.cache.set(key, c);
+    }
+    return c;
+  }
+}
+
+const SKY_INDEX: Record<Sky, number> = { dawn: 0, day: 1, sunset: 2, night: 3 };
+
 /** Sun with a stepped halo, or the moon in its phase with a faint glow. */
-export function drawOrb(p: Painter, sky: Sky, x: number, y: number, phase: number): void {
+export function drawOrb(p: Painter, sky: Sky, x: number, y: number, phase: number, glow?: GlowCanvas): void {
   if (sky === 'night') {
     const rad = 7;
     // glow: a dithered ring
@@ -278,14 +323,15 @@ export function drawOrb(p: Painter, sky: Sky, x: number, y: number, phase: numbe
   const low = sky !== 'day';
   const rad = low ? 13 : 9;
   const k = SKIES[sky];
-  // halo in two dithered rings, then the disc with a bright core
-  for (let ring = 2; ring >= 1; ring--) {
-    const rr = rad + ring * 3;
-    for (let dy = -rr; dy <= rr; dy++) {
-      if ((dy + ring) & 1) continue;
-      const half = Math.round(Math.sqrt(rr * rr - dy * dy));
-      p.fill(ring === 2 ? k.bands[3] : low ? C.gold : C.sun, x - half, y + dy, 2 * half + 1, 1);
-    }
+  // a wide dithered glow, a thin bright ring, then the disc with a bright core
+  if (glow) {
+    const g = glow.get(sky, low ? 46 : 30);
+    p.ctx.drawImage(g, x - (g.width >> 1), y - (g.height >> 1));
+  }
+  const ring = rad + 2;
+  for (let dy = -ring; dy <= ring; dy++) {
+    const half = Math.round(Math.sqrt(ring * ring - dy * dy));
+    p.fill(sky === 'dawn' ? C.orange : low ? C.gold : C.sun, x - half, y + dy, 2 * half + 1, 1);
   }
   for (let dy = -rad; dy <= rad; dy++) {
     const half = Math.round(Math.sqrt(rad * rad - dy * dy));

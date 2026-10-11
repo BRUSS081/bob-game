@@ -17,7 +17,9 @@ import { t } from '../i18n/strings.ts';
 import { C, PALETTE, PALETTE_CSS } from './palette.ts';
 import { ARC, Environment } from '../env/environment.ts';
 import type { Sky } from '../env/sky.ts';
-import { CloudArt, FogCanvas, HORIZON_ABOVE_SEA, SKIES, SkyCanvas, drawClouds, drawGlitter, drawOrb, drawStars, drawWeatherFront, orbPosition } from './sky.ts';
+import { DAYLIGHT, lightFor, lightPixels, type Light } from './light.ts';
+import { WAVE_BANDS, WaveTiles, waterStep } from './waves.ts';
+import { CloudArt, FogCanvas, GlowCanvas, HORIZON_ABOVE_SEA, SKIES, SkyCanvas, drawClouds, drawGlitter, drawOrb, drawStars, drawWeatherFront, orbPosition } from './sky.ts';
 
 export type { Sky } from '../env/sky.ts';
 export { SKIES, HORIZON_ABOVE_SEA } from './sky.ts';
@@ -67,7 +69,7 @@ export interface PoseView {
 export type ButtonStyle = 'primary' | 'normal' | 'selected' | 'ghost';
 
 /** A canvas with a raster's palette colors (palette indices only, no customization slots). */
-export function rasterCanvas(r: Raster): HTMLCanvasElement {
+export function rasterCanvas(r: Raster, light: Light = DAYLIGHT): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
   canvas.width = r.w;
   canvas.height = r.h;
@@ -83,8 +85,36 @@ export function rasterCanvas(r: Raster): HTMLCanvasElement {
       img.data[i * 4 + 2] = rgb & 0xff;
       img.data[i * 4 + 3] = 255;
     }
+    lightPixels(img.data, r.w, r.h, light);
     ctx.putImageData(img, 0, 0);
   }
+  return canvas;
+}
+
+/** Rows of reflection under the surface. */
+const REFLECT_DEPTH = 36;
+
+/** A sprite in two tones of the water around `sea`: darker where it is dark, lighter where it is bright. */
+function mirrorCanvas(src: HTMLCanvasElement, sea: number): HTMLCanvasElement {
+  const canvas = document.createElement('canvas');
+  canvas.width = src.width;
+  canvas.height = src.height;
+  const ctx = canvas.getContext('2d');
+  const sctx = src.getContext('2d');
+  if (!ctx || !sctx) return canvas;
+  // a reflection takes the tones next to the water's own
+  const dark = PALETTE[waterStep(sea, -1)];
+  const light = PALETTE[waterStep(sea, 1)];
+  const img = sctx.getImageData(0, 0, src.width, src.height);
+  const d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    if (d[i + 3] === 0) continue;
+    const c = 0.3 * d[i] + 0.59 * d[i + 1] + 0.11 * d[i + 2] > 140 ? light : dark;
+    d[i] = (c >> 16) & 0xff;
+    d[i + 1] = (c >> 8) & 0xff;
+    d[i + 2] = c & 0xff;
+  }
+  ctx.putImageData(img, 0, 0);
   return canvas;
 }
 
@@ -106,10 +136,21 @@ export class Renderer {
   /** UI scale: text and buttons double on phones so they stay readable. */
   u = 1;
   private readonly display: Display;
-  private readonly props = new Map<ObstacleName, HTMLCanvasElement[]>();
+  /** Obstacle art per name and light. */
+  private readonly props = new Map<string, HTMLCanvasElement[]>();
   private readonly powers: Record<'wave' | 'gust', HTMLCanvasElement | null> = { wave: null, gust: null };
   private readonly swatches = new Map<Ramp, [string, string, string]>();
   private dolphinCanvases: HTMLCanvasElement[] | null = null;
+  private dolphinLight: Light = DAYLIGHT;
+  /**
+   * Light on the sprites of the world, set by backdrop() from the sky it
+   * paints; daylight on screens without one (underwater, seen from above).
+   */
+  light: Light = DAYLIGHT;
+  /** Reflections on the water, per sprite canvas, in the tones of the sea they were built for. */
+  private readonly mirrors = new WeakMap<HTMLCanvasElement, { tone: number; canvas: HTMLCanvasElement }>();
+  /** The color of the near sea painted by the last backdrop(). */
+  private waterTone: number = C.sea;
   private readonly icons = new Map<IconName, HTMLCanvasElement>();
   private readonly ghosts = new WeakMap<AthleteSprites, AthleteSprites>();
   /** Fish and the other sea creatures, built on first use. */
@@ -120,6 +161,8 @@ export class Renderer {
   private readonly cloudArt = new CloudArt(rasterCanvas);
   private readonly skyCanvas = new SkyCanvas(rasterCanvas);
   private readonly fogCanvas = new FogCanvas(rasterCanvas);
+  private readonly waveTiles = new WaveTiles(rasterCanvas);
+  private readonly glowCanvas = new GlowCanvas(rasterCanvas);
   private readonly orb = { x: 0, y: 0 };
 
   constructor(display: Display) {
@@ -136,6 +179,7 @@ export class Renderer {
     this.H = l.height;
     this.seaY = surface(l.height);
     this.u = l.cssWidth / l.width < 2 ? 2 : 1;
+    this.light = DAYLIGHT;
   }
 
   present(): void {
@@ -196,12 +240,13 @@ export class Renderer {
     const grey = look.grey;
     const k = SKIES[sky];
     const horizon = seaY - HORIZON_ABOVE_SEA;
+    this.light = lightFor(sky, grey);
     if (horizon > 0) this.ctx.drawImage(this.skyCanvas.get(sky, grey, W, horizon), 0, 0);
     if (k.stars && !grey) drawStars(this, horizon - 6, env.clock);
     if (!grey) {
       // the real arc when this is the real sky; a fixed place for a sky chosen by a game
       orbPosition(this, sky === env.sky ? env.arc : ARC[sky], horizon, this.orb);
-      drawOrb(this, sky, this.orb.x, this.orb.y, env.moon);
+      drawOrb(this, sky, this.orb.x, this.orb.y, env.moon, this.glowCanvas);
     }
     drawClouds(this, this.cloudArt, sky, grey, look.clouds, horizon, distance, env.clock);
     // the far sea at the horizon, darker under rain clouds and darker still in a storm
@@ -224,13 +269,29 @@ export class Renderer {
       this.dashes(horizon + 22, 23, 4, distance * 0.4 + env.clock * 13, C.foamShadow);
     }
     if (!grey) drawGlitter(this, this.orb.x, horizon + 5, seaY - 2, k.glitter, env.clock);
+    this.waterTone = sea;
     this.fill(sea, 0, seaY, W, H - seaY);
     this.fill(seaTop, 0, seaY, W, 4);
-    this.dashes(seaY + 14, 61, 10, distance + 11, k.seaDash[0]);
-    this.dashes(seaY + 27, 43, 6, distance * 1.2 + 3, k.seaDash[1]);
-    this.dashes(seaY + 41, 71, 12, distance * 1.4 + 37, k.seaDash[2]);
-    if (look.swell > 1.3) this.dashes(seaY + 20, 37, 5, distance * 1.1 + env.clock * 20, storm ? C.foamShadow : C.aqua);
+    this.dashes(seaY + 8, 61, 10, distance + 11, k.seaDash[0]);
     const depth = H - seaY;
+    // rolling swells in the foreground, taller when the sea is rough
+    const waveBottom = depth > 90 ? seaY + 80 : H;
+    const foam = sky === 'night' ? C.silver : dark ? C.mist : C.white;
+    for (let b = 0; b < WAVE_BANDS.length; b++) {
+      const band = WAVE_BANDS[b];
+      const top = seaY + band.top + Math.round(Math.sin(env.clock * 1.2 + b * 2.1));
+      if (top + 4 >= waveBottom) break;
+      const fill = b % 2 === 0 ? seaTop : sea;
+      const tile = this.waveTiles.get(b, Math.max(2, Math.round(band.amp * look.swell)), fill, waterStep(fill, 1), foam);
+      let x = -Math.floor((distance * band.speed) % band.length);
+      if (x > 0) x -= band.length;
+      for (; x < W; x += band.length) this.ctx.drawImage(tile, x, top);
+      const body = top + tile.height;
+      if (body < waveBottom) {
+        this.fill(fill, 0, body, W, waveBottom - body);
+        if (body + 3 < waveBottom) this.dashes(body + 2, 43 + b * 14, 6 + b * 3, distance * band.speed + b * 29, k.seaDash[Math.min(2, b + 1)]);
+      }
+    }
     if (depth > 90) {
       this.fill(mid, 0, seaY + 80, W, depth - 80);
       this.dashes(seaY + 80, 29, 14, distance * 1.4 + 7, sea);
@@ -283,10 +344,12 @@ export class Renderer {
   }
 
   private propCanvases(name: ObstacleName): HTMLCanvasElement[] {
-    let list = this.props.get(name);
+    const key = name + this.light.id;
+    let list = this.props.get(key);
     if (!list) {
-      list = propRasters(name).map(rasterCanvas);
-      this.props.set(name, list);
+      const light = this.light;
+      list = propRasters(name).map((r) => rasterCanvas(r, light));
+      this.props.set(key, list);
     }
     return list;
   }
@@ -306,6 +369,7 @@ export class Renderer {
         const dx = x + Math.round(k.w / 2) - ANCHOR_X;
         const dy = seaY - alt - ANCHOR_Y;
         if (k.name === 'kiter' && set.kite.length > 0) this.kite(set, x, alt, seaY, clock + i * 0.37, dx, dy, false);
+        this.reflect(frame, dx, dy, clock + i);
         this.ctx.drawImage(frame, dx, dy);
         continue;
       }
@@ -315,7 +379,9 @@ export class Renderer {
         continue;
       }
       const img = list.length > 1 ? list[(Math.floor(clock * 6) + i) % list.length] : list[0];
-      this.ctx.drawImage(img, x, seaY - Math.round(o.y) - k.h);
+      const y = seaY - Math.round(o.y) - k.h;
+      this.reflect(img, x, y, clock + i);
+      this.ctx.drawImage(img, x, y);
     }
   }
 
@@ -323,9 +389,11 @@ export class Renderer {
   dolphins(d: Dolphins, playerX: number): void {
     if (!d.active) return;
     let list = this.dolphinCanvases;
-    if (!list) {
-      list = dolphinRasters().map(rasterCanvas);
+    if (!list || this.dolphinLight !== this.light) {
+      const light = this.light;
+      list = dolphinRasters().map((r) => rasterCanvas(r, light));
       this.dolphinCanvases = list;
+      this.dolphinLight = light;
     }
     const size = list[0].width;
     for (let i = 0; i < DOLPHIN_COUNT; i++) {
@@ -450,8 +518,40 @@ export class Renderer {
       const spinning = a.state === 'air' && a.rotation > 0;
       this.kite(set, x, alt - sink * 3, surface, clock, dx, dy, spinning, scale);
     }
+    if (scale === 1 && surface === this.seaY) this.reflect(frame, dx, dy, clock);
     if (scale === 1) this.ctx.drawImage(frame, dx, dy);
     else this.ctx.drawImage(frame, dx, dy, FRAME_W * scale, FRAME_H * scale);
+  }
+
+  /**
+   * The reflection of a sprite drawn at (dx, dy) on the sea below it: the
+   * rows above the surface mirrored under it in two tones of the water, one
+   * row in two (one in four further down) and rippling sideways, so it
+   * fades and breaks up like a reflection on moving water.
+   */
+  private reflect(img: HTMLCanvasElement, dx: number, dy: number, clock: number): void {
+    const { seaY, H } = this;
+    const m = this.mirrorOf(img);
+    const swell = this.env.look.swell;
+    for (let sy = img.height - 1; sy >= 0; sy--) {
+      const depth = seaY - 1 - (dy + sy);
+      if (depth < 0) continue;
+      if (depth > REFLECT_DEPTH) break;
+      if (depth % (depth < REFLECT_DEPTH / 2 ? 2 : 4) !== 0) continue;
+      const ry = seaY + 2 + depth;
+      if (ry >= H) break;
+      const off = Math.round(Math.sin(clock * 3 + depth * 0.8) * (0.6 + depth / 14) * swell);
+      this.ctx.drawImage(m, 0, sy, m.width, 1, dx + off, ry, m.width, 1);
+    }
+  }
+
+  private mirrorOf(img: HTMLCanvasElement): HTMLCanvasElement {
+    const tone = this.waterTone;
+    const hit = this.mirrors.get(img);
+    if (hit && hit.tone === tone) return hit.canvas;
+    const canvas = mirrorCanvas(img, tone);
+    this.mirrors.set(img, { tone, canvas });
+    return canvas;
   }
 
   /** A white silhouette of a sprite set, built once per set. */

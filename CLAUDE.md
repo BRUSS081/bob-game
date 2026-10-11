@@ -28,11 +28,12 @@ La fonte di verità è **[docs/BRIEF.md](docs/BRIEF.md)**: leggilo per intero al
 |---|---|
 | 1 — Concept art | fatta: pixel art di riferimento disegnate in codice (`npm run reference` → `/reference`) |
 | 2 — Setup e loop di gioco | fatta |
-| 3 — Ambiente | da fare (prossima: le fasi 4 e 5 sono state anticipate su richiesta dell'utente) |
-| 4 — Sprite e personalizzazione | fatta, in attesa di ok: sprite BOB/BOBBA in codice, `/dev/sprites`, home con sport e BOB/BOBBA, personalizzazione a 3 schede |
-| 5 — Kitesurf e wing foil | fatta, in attesa di ok: meccaniche, ostacoli e power-up per sport, bot su 3 sport, 122 test |
-| Extra — proposte di gameplay | fatte, in attesa di ok (autonomia piena data dall'utente): al pelo, ritmo a ondate, flow nel wing, rivali vivi, delfini, sfida del giorno con fantasma, missioni con colori speciali, tutorial, effetti, cartolina; 146 test |
-| Extra — modalità e altri giochi | fatti, in attesa di ok: home a carosello, 5 modalità del runner, 12 giochi nuovi, album condiviso; 217 test |
+| 3 — Ambiente | fatta, in attesa di ok: ora reale (alba, giorno, tramonto, notte, sole e luna su un arco, fase lunare vera), meteo casuale per partita (sereno, nuvoloso, pioggia, temporale, nebbia), particelle, schermata impostazioni |
+| 4 — Sprite e personalizzazione | fatta e approvata: sprite BOB/BOBBA in codice, `/dev/sprites`, home con sport e BOB/BOBBA, personalizzazione a 3 schede |
+| 5 — Kitesurf e wing foil | fatta e approvata: meccaniche, ostacoli e power-up per sport, bot su 3 sport |
+| Extra — proposte di gameplay | fatte e approvate: al pelo, ritmo a ondate, flow nel wing, rivali vivi, delfini, sfida del giorno con fantasma, missioni con colori speciali, tutorial, effetti, cartolina |
+| Extra — modalità e altri giochi | fatti e approvati: home a carosello, 5 modalità del runner, 12 giochi nuovi, album condiviso |
+| Extra — passata di pixel art | fatta, in attesa di ok: analisi con riferimenti in `docs/PIXEL-ART.md`, luce dell'ora sugli sprite, riflessi sull'acqua, onde in primo piano, cielo e sole più morbidi; 232 test |
 | 6 — Classifica globale | da fare |
 | 7 — Rifinitura | da fare |
 
@@ -52,5 +53,7 @@ Aggiorna questa tabella a ogni fine fase.
 - Idee discusse con l'utente (modalità approvate, altri giochi proposti, ordine da confermare): `docs/IDEE.md`. Aggiornalo quando l'utente approva o scarta un'idea.
 - Giochi nuovi: uno per file in `src/games/` (classe di logica pura testata in `tests/games/` + schermata che estende `MiniGame` di `src/games/kit.ts`: carta iniziale, pausa, fine, record, popup), registrati in `src/games/index.ts`; elenco e ordine del carosello in `src/games/registry.ts`. Parole di ogni gioco in `gameText.<gioco>` di `strings.ts`. Pose nuove di BOB/BOBBA in `src/sprites/actor.ts` (`ctx.actor(kind)`: paddle, fish, swim, photo, stand, slope, top, boat), creature in `src/games/sealife.ts` + `src/sprites/fish.ts`, tesori in `src/games/treasures.ts`, fondali in `src/render/sea.ts`, album in `src/custom/album.ts` + `src/ui/album.ts`. Modalità del runner: `src/game/modes.ts`, `src/game/tour.ts`, schermate `src/ui/setup.ts` e `src/ui/tour.ts`.
 - Con 5 agenti in parallelo il limite di utilizzo dell'account si è esaurito in pochi minuti: meglio lavorare in sequenza.
+- Fase 3: logica pura in `src/env/` (`sky.ts` ora, alba e tramonto stagionali senza posizione, fase lunare; `weather.ts` meteo e probabilità; `environment.ts` stato condiviso `r.env`, lampi). Disegno in `src/render/sky.ts` (cielo, sole/luna, stelle, nuvole, nebbia, pioggia e lampi davanti alla scena con `r.weatherFront`), particelle in `src/render/particles.ts`. Impostazioni in `src/ui/settings.ts`, chiave `bob.settings` (`sky`, `weather`: valore o `auto`). Per provare un cielo dalla console: `app.r.env.apply('night', 'storm')`.
+- Pixel art: `src/render/light.ts` ricolora gli sprite per ora e meteo quando entrano in cache (`r.light` lo imposta `backdrop()`, le cache di sprite, pose e ostacoli lo usano come chiave; la personalizzazione forza `DAYLIGHT`). Riflessi in `Renderer.reflect`, onde in primo piano in `src/render/waves.ts`. Home e scelta modalità scelgono la misura più grande che entra (su telefono in orizzontale rimpiccioliscono la scheda, mai i pulsanti).
 - Pagina di revisione sprite: `npm run dev` → `/dev/sprites/` (solo sviluppo, non va in build).
 - Oltre a Vercel, la build giocabile è pubblicata come Artifact privato: https://claude.ai/artifact/HntjK84i2eX8KPYm4UGLjL (file unico generato da `dist/` con JS e CSS inline).

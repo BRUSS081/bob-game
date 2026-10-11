@@ -12,6 +12,7 @@ import type { SportId } from './game/sport.ts';
 import { Renderer } from './render/renderer.ts';
 import type { ActorKind } from './sprites/actor.ts';
 import { ActorCache, SpriteCache, type AthleteSprites } from './sprites/sheet.ts';
+import { DAYLIGHT, type Light } from './render/light.ts';
 import { CustomizeScreen } from './ui/customize.ts';
 import { HomeScreen } from './ui/home.ts';
 import { MissionsScreen } from './ui/missions.ts';
@@ -38,6 +39,7 @@ export class App implements Context {
   private readonly actors = new ActorCache(10);
   private readonly demos = {} as Record<SportId, Athlete>;
   private playerSprites: AthleteSprites | null = null;
+  private playerLight: Light = DAYLIGHT;
   private readonly screens: Partial<Record<ScreenId, Screen>>;
   private readonly pointerPos = { x: 0, y: 0 };
   private readonly playScreen: PlayScreen;
@@ -79,17 +81,21 @@ export class App implements Context {
     return this.playScreen.current;
   }
 
+  /** The player's sprites in the light of the scene being drawn. */
   player(): AthleteSprites {
-    if (!this.playerSprites) this.playerSprites = this.cache.get(this.profile.look(), this.profile.sport);
+    if (!this.playerSprites || this.playerLight !== this.r.light) {
+      this.playerSprites = this.cache.get(this.profile.look(), this.profile.sport, true, this.r.light);
+      this.playerLight = this.r.light;
+    }
     return this.playerSprites;
   }
 
   sprites(config: AthleteConfig, sport: SportId, spins = true): AthleteSprites {
-    return this.cache.get(config, sport, spins);
+    return this.cache.get(config, sport, spins, this.r.light);
   }
 
   actor(kind: ActorKind, config: AthleteConfig = this.profile.look('surf')): readonly HTMLCanvasElement[] {
-    return this.actors.get(config, kind);
+    return this.actors.get(config, kind, this.r.light);
   }
 
   demo(sport: SportId): Athlete {

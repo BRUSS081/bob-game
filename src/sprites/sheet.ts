@@ -13,6 +13,7 @@ import {
   type FrameName,
 } from './compose.ts';
 import { composeActor, type ActorKind } from './actor.ts';
+import { DAYLIGHT, lightPixels, type Light } from '../render/light.ts';
 import { buildLut } from './ramps.ts';
 import type { Raster } from './raster.ts';
 
@@ -30,7 +31,7 @@ export interface AthleteSprites {
   readonly barTop: readonly [number, number];
 }
 
-function toCanvas(r: Raster, lut: Uint32Array): HTMLCanvasElement {
+function toCanvas(r: Raster, lut: Uint32Array, light: Light): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
   canvas.width = r.w;
   canvas.height = r.h;
@@ -39,6 +40,7 @@ function toCanvas(r: Raster, lut: Uint32Array): HTMLCanvasElement {
   const img = ctx.createImageData(r.w, r.h);
   const out = new Uint32Array(img.data.buffer);
   for (let i = 0; i < r.px.length; i++) out[i] = lut[r.px[i]];
+  lightPixels(img.data, r.w, r.h, light);
   ctx.putImageData(img, 0, 0);
   return canvas;
 }
@@ -56,9 +58,9 @@ export class SpriteCache {
     this.limit = limit;
   }
 
-  /** `spins` false skips the trick rotations (rivals never spin). */
-  get(config: AthleteConfig, sport: SportId, spins = true): AthleteSprites {
-    const key = spins ? configKey(config, sport) : configKey(config, sport) + ':ns';
+  /** `spins` false skips the trick rotations (rivals never spin). One set per light of the scene. */
+  get(config: AthleteConfig, sport: SportId, spins = true, light: Light = DAYLIGHT): AthleteSprites {
+    const key = configKey(config, sport) + (spins ? ':' : ':ns') + light.id;
     const hit = this.cache.get(key);
     if (hit) {
       // refresh LRU order
@@ -66,7 +68,7 @@ export class SpriteCache {
       this.cache.set(key, hit);
       return hit;
     }
-    const built = build(config, sport, spins);
+    const built = build(config, sport, spins, light);
     this.cache.set(key, built);
     if (this.cache.size > this.limit) {
       const oldest = this.cache.keys().next().value;
@@ -76,15 +78,15 @@ export class SpriteCache {
   }
 }
 
-function build(c: AthleteConfig, sport: SportId, withSpins: boolean): AthleteSprites {
+function build(c: AthleteConfig, sport: SportId, withSpins: boolean, light: Light): AthleteSprites {
   const lut = buildLut(resolveRamps(c));
   const rasters = {} as Record<FrameName, Raster>;
   for (const name of FRAME_NAMES) rasters[name] = composeFrame(c, sport, name);
   const frames = {} as Record<FrameName, HTMLCanvasElement>;
-  for (const name of FRAME_NAMES) frames[name] = toCanvas(rasters[name], lut);
+  for (const name of FRAME_NAMES) frames[name] = toCanvas(rasters[name], lut, light);
   const spins: HTMLCanvasElement[] = [];
   if (withSpins && sport !== 'wing') {
-    for (let k = 0; k < SPIN_STEPS; k++) spins.push(toCanvas(rotateFrame(rasters.air, (k / SPIN_STEPS) * Math.PI * 2), lut));
+    for (let k = 0; k < SPIN_STEPS; k++) spins.push(toCanvas(rotateFrame(rasters.air, (k / SPIN_STEPS) * Math.PI * 2), lut, light));
   }
   const kite: HTMLCanvasElement[] = [];
   let tipL: readonly [number, number] = [0, 0];
@@ -92,7 +94,7 @@ function build(c: AthleteConfig, sport: SportId, withSpins: boolean): AthleteSpr
   if (sport === 'kite') {
     for (let f = 0; f < 2; f++) {
       const k = composeKite(c, f);
-      kite.push(toCanvas(k.raster, lut));
+      kite.push(toCanvas(k.raster, lut, light));
       tipL = k.tipL;
       tipR = k.tipR;
     }
@@ -112,8 +114,8 @@ export class ActorCache {
     this.limit = limit;
   }
 
-  get(config: AthleteConfig, kind: ActorKind): readonly HTMLCanvasElement[] {
-    const key = configKey(config, 'surf') + ':' + kind;
+  get(config: AthleteConfig, kind: ActorKind, light: Light = DAYLIGHT): readonly HTMLCanvasElement[] {
+    const key = configKey(config, 'surf') + ':' + kind + ':' + light.id;
     const hit = this.cache.get(key);
     if (hit) {
       this.cache.delete(key);
@@ -121,7 +123,7 @@ export class ActorCache {
       return hit;
     }
     const lut = buildLut(resolveRamps(config));
-    const built = composeActor(config, kind).map((r) => toCanvas(r, lut));
+    const built = composeActor(config, kind).map((r) => toCanvas(r, lut, light));
     this.cache.set(key, built);
     if (this.cache.size > this.limit) {
       const oldest = this.cache.keys().next().value;

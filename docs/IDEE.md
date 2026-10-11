@@ -11,7 +11,7 @@ Vincoli che valgono anche qui: tutto in mare aperto (niente terraferma), pixel a
 | Triathlon | fatta | Una run che cambia sport ogni ~40 s (surf → kite → wing → di nuovo, più veloce), con transizione tra le tavole. |
 | 60 secondi | fatta | Un minuto senza game over: cadere costa la combo e 2 s. Contano trick, al pelo e delfini. |
 | Onda gigante | fatta | Un'onda enorme insegue da sinistra: drag e atterraggi sbagliati rallentano, i trick fanno allungare. Se ti prende è wipeout. |
-| Giro del mondo | fatta (cielo per spot; il meteo arriva con la fase 3) | 12 "spot" con obiettivi ("arriva a 1500", "5 trick", "passa 3 barche") e fino a 3 stelle, ognuno con la sua ora e il suo meteo. |
+| Giro del mondo | fatta (cielo per spot, meteo casuale come nelle altre partite) | 12 "spot" con obiettivi ("arriva a 1500", "5 trick", "passa 3 barche") e fino a 3 stelle, ognuno con la sua ora e il suo meteo. |
 | Free ride | fatta | Nessun ostacolo e nessun punteggio: cavalcare, trick e panorama. |
 | Duello | scartata dall'utente | Due giocatori sullo stesso schermo. |
 
@@ -83,4 +83,4 @@ Tutti fatti su richiesta dell'utente ("implementale tutte, ma senza una home pie
 
 - Fatto: tutte le modalità tranne il Duello (scartato), i 12 giochi, l'album condiviso, la home a carosello.
 - Differenze dalle proposte: Pesca senza opzione "rilascia" (ogni cattura va nell'album); Acquario come vasca, con un visitatore al giorno; Gabbiano con aquiloni guidati da BOB/BOBBA; specie notturne legate all'ora reale del dispositivo.
-- Prossimi passi possibili: fase 3 (ambiente, meteo) che arricchisce tutti i giochi, poi fase 6 (classifica per gioco e modalità) e fase 7 (rifinitura, IT e PT).
+- Fase 3 (ambiente, meteo) fatta: arricchisce tutti i giochi. Prossimi passi possibili: fase 6 (classifica per gioco e modalità) e fase 7 (rifinitura, IT e PT); idee di pixel art ancora aperte in `docs/PIXEL-ART.md`.

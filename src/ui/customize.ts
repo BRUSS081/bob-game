@@ -4,6 +4,7 @@ import type { AthleteState } from '../game/athletes.ts';
 import { cycleSport, type SportId } from '../game/sport.ts';
 import { t } from '../i18n/strings.ts';
 import { GLYPH_H } from '../render/font.ts';
+import { DAYLIGHT } from '../render/light.ts';
 import { C } from '../render/palette.ts';
 import { inside, newRect, setRect, type PoseView, type Rect } from '../render/renderer.ts';
 import { GEAR_COLORS, HAIR_COLORS, LENS_COLORS, SKIN_TONES, type Ramp } from '../sprites/ramps.ts';
@@ -251,6 +252,8 @@ export class CustomizeScreen implements Screen {
 
     r.backdrop(this.clock * 30);
     r.surfaceFront(this.clock * 30);
+    // the preview shows the true colors, whatever the time of day
+    r.light = DAYLIGHT;
 
     const maxRows = this.maxRows;
 

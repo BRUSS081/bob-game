@@ -1,7 +1,7 @@
 /** Keys that act as the game's single button. */
 const GAME_KEYS = new Set(['Space', 'ArrowUp']);
 /** Keys used by menus; all of them are kept from scrolling the page. */
-const MENU_KEYS = new Set(['ArrowLeft', 'ArrowRight', 'ArrowDown', 'Enter', 'Escape', 'Tab', 'KeyR', 'KeyA', 'KeyD']);
+const MENU_KEYS = new Set(['ArrowLeft', 'ArrowRight', 'ArrowDown', 'Enter', 'Escape', 'Tab', 'KeyR', 'KeyA', 'KeyD', 'Digit1', 'Digit2', 'Digit3']);
 /** Keys that steer in the games seen from above. */
 const LEFT_KEYS = new Set(['ArrowLeft', 'KeyA']);
 const RIGHT_KEYS = new Set(['ArrowRight', 'KeyD']);

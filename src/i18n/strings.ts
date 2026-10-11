@@ -155,7 +155,19 @@ export const STRINGS = {
         last: 'LAST HAUL!',
       },
       raft: {
-        // raft
+        tile: 'PLANK',
+        net: 'NET',
+        sail: 'SAIL',
+        w: 'W',
+        p: 'P',
+        day: 'DAY',
+        repel: 'GO AWAY!',
+        broke: 'THE SHARK TOOK A PLANK!',
+        built: 'BUILT!',
+        rescued: 'RESCUED!',
+        sunk: 'THE RAFT IS GONE',
+        days: 'DAYS',
+        hint: 'HOLD TO AIM, LET GO TO THROW',
       },
       reef: {
         // reef

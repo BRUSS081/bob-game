@@ -40,6 +40,20 @@ export function underwater(r: Renderer, top: number, bottom: number, clock: numb
       }
     }
   }
+  // caustics: the net of light the waves throw just under the surface
+  if (depth0 < 0.1) {
+    const rows = Math.min(h, Math.round(((0.1 - depth0) / (depth1 - depth0)) * h));
+    const light = night ? C.teal : C.aqua;
+    for (let y = 2; y < rows; y += 3) {
+      const fade = y / rows;
+      const step = 9 + Math.round(fade * 10);
+      const shift = Math.round(Math.sin(clock * 1.7 + y * 0.45) * 4 + clock * 6);
+      for (let x = -step + (((shift % step) + step) % step); x < r.W; x += step) {
+        if (hash(Math.floor((x - shift) / step) * 13 + y) % 3 === 0) continue;
+        r.fill(light, x, top + y, 3 - Math.round(fade * 2), 1);
+      }
+    }
+  }
   // light shafts from the surface, swaying slowly
   if (depth0 < 0.4) {
     const len = Math.min(h, Math.round((0.4 - depth0) / (depth1 - depth0) * h));
@@ -93,6 +107,16 @@ export function seaFloor(r: Renderer, y: number, scroll: number, clock: number, 
   const dark = night ? C.indigo : C.brown;
   r.fill(sand, 0, y, r.W, r.H - y);
   for (let x = -((scroll | 0) % 7) - 7; x < r.W; x += 7) r.fill(dark, x, y + 3 + ((x + (scroll | 0)) & 4 ? 1 : 0), 3, 1);
+  // dapples of light on the sand, drifting with the waves above
+  const dapple = night ? C.grey : C.sun;
+  for (let i = 0; i < 18; i++) {
+    const hv = hash(i * 7 + 101);
+    const span = r.W + 20;
+    const x = Math.round(((((hv % 997) - scroll + Math.sin(clock * 0.9 + i) * 5) % span) + span) % span) - 10;
+    const dy = 1 + ((hv >>> 10) % 6);
+    if (y + dy >= r.H) continue;
+    r.fill(dapple, x, y + dy, 2 + ((hv >>> 4) % 3), 1);
+  }
   const first = Math.floor(scroll / SLOT) - 2;
   const last = Math.ceil((scroll + r.W) / SLOT) + 1;
   for (let k = first; k <= last; k++) {

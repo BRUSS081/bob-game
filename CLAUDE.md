@@ -5,8 +5,9 @@ La fonte di verità è **[docs/BRIEF.md](docs/BRIEF.md)**: leggilo per intero al
 
 ## Regole di lavoro
 - Lavora per fasi, nell'ordine del brief (1 → 7). Non anticipare lavoro di fasi successive.
-- A fine fase: commit, preview su Vercel (dalla fase 2), riepilogo breve di cosa guardare e cosa testare. Poi **FERMATI** e aspetta l'ok esplicito dell'utente.
-- Se trovi un problema di design o una scelta migliore, proponila **prima** di implementarla.
+- **Piena autonomia** (decisione dell'utente): non chiedere l'ok per idee, migliorie o passaggi di fase. Implementa e basta, poi riassumi cosa hai fatto.
+- A fine fase: commit, deploy in produzione e Artifact aggiornati, riepilogo breve di cosa guardare e cosa testare; poi prosegui.
+- Se trovi un problema di design o una scelta migliore, applicala e segnalala nel riepilogo.
 - Chiedi **prima** di qualsiasi azione che costa: crediti Higgsfield oltre quelli della fase 1, piani a pagamento di Supabase o Vercel.
 - Comunica con l'utente in italiano. Codice, commenti e commit in inglese.
 

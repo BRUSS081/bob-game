@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { SKY_NAMES } from '../src/env/sky.ts';
-import { DAYLIGHT, lightFor, lightPixels, shade } from '../src/render/light.ts';
+import { DAYLIGHT, LIGHTNING, lightFor, lightPixels, shade } from '../src/render/light.ts';
+import { moonLight } from '../src/render/sky.ts';
 import { C, PALETTE } from '../src/render/palette.ts';
 import { WAVE_BANDS, waterStep, waveStrip } from '../src/render/waves.ts';
 
@@ -56,6 +57,19 @@ describe('scene light', () => {
     const coral = PALETTE[C.coral];
     const spread = (c: number) => Math.max(...rgb(c)) - Math.min(...rgb(c));
     expect(spread(shade(coral, lightFor('day', true)))).toBeLessThan(spread(coral));
+  });
+
+  it('a lightning strike washes everything out, even at night', () => {
+    const navy = PALETTE[C.navy];
+    expect(luma(shade(navy, LIGHTNING))).toBeGreaterThan(luma(navy) + 40);
+    expect(LIGHTNING.id).toBeGreaterThanOrEqual(8);
+  });
+
+  it('knows how much of the moon is lit', () => {
+    expect(moonLight(0)).toBeCloseTo(0, 5);
+    expect(moonLight(0.5)).toBeCloseTo(1, 5);
+    expect(moonLight(0.25)).toBeCloseTo(0.5, 5);
+    expect(moonLight(0.99)).toBeLessThan(0.01);
   });
 
   it('the rim lights only the side facing the sun, inside the outline', () => {

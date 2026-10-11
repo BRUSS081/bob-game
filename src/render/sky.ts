@@ -28,6 +28,8 @@ export interface SkyColors {
   haze: number;
   /** Dithered glow around the sun. */
   halo: number;
+  /** Sunlight on the cloud edges facing a low sun (0: none). */
+  cloudRim: number;
   /** Sun or moon. */
   orb: number;
   /** The sun's or moon's light on the water. */
@@ -52,6 +54,7 @@ export const SKIES: Record<Sky, SkyColors> = {
     glitter: C.sun,
     haze: C.white,
     halo: C.sun,
+    cloudRim: C.gold,
     clouds: [C.sun, C.rose, C.mauve],
   },
   day: {
@@ -69,6 +72,7 @@ export const SKIES: Record<Sky, SkyColors> = {
     glitter: C.white,
     haze: C.mist,
     halo: C.skyPale,
+    cloudRim: 0,
     clouds: [C.white, C.mist, C.skyLight],
   },
   sunset: {
@@ -86,6 +90,7 @@ export const SKIES: Record<Sky, SkyColors> = {
     glitter: C.gold,
     haze: C.gold,
     halo: C.gold,
+    cloudRim: C.gold,
     clouds: [C.mauve, C.violet, C.orange],
   },
   night: {
@@ -103,6 +108,7 @@ export const SKIES: Record<Sky, SkyColors> = {
     glitter: C.silver,
     haze: C.indigo,
     halo: C.indigo,
+    cloudRim: 0,
     clouds: [C.slate, C.indigo, C.navy],
   },
 };
@@ -166,14 +172,28 @@ export class CloudArt {
     this.toCanvas = toCanvas;
   }
 
-  get(shape: number, tones: readonly [number, number, number]): HTMLCanvasElement {
-    const key = shape * 4096 + tones[0] * 64 + tones[1] + tones[2] * 100000;
+  /** `rim` (a palette index, or 0) lights the edge on `side` (-1 left, 1 right). */
+  get(shape: number, tones: readonly [number, number, number], rim = 0, side = 0): HTMLCanvasElement {
+    const key = (((shape * 64 + tones[0]) * 64 + tones[1]) * 64 + tones[2]) * 192 + rim * 3 + side + 1;
     let c = this.cache.get(key);
     if (!c) {
       if (this.shapes.length === 0) for (let s = 0; s < SHAPES; s++) this.shapes.push(cloudRaster(s));
       const src = this.shapes[shape % SHAPES];
       const out = new Raster(src.w, src.h);
       for (let i = 0; i < src.px.length; i++) if (src.px[i]) out.px[i] = tones[src.px[i] - 1];
+      if (rim !== 0 && side !== 0) {
+        // two pixels of sunlight on the edge facing the sun, above the underside
+        for (let y = 0; y < src.h; y++) {
+          for (let x = 0; x < src.w; x++) {
+            if (!src.px[y * src.w + x] || src.px[y * src.w + x] === 3) continue;
+            const n1 = x + side;
+            const n2 = x + 2 * side;
+            const empty1 = n1 < 0 || n1 >= src.w || !src.px[y * src.w + n1];
+            const empty2 = n2 < 0 || n2 >= src.w || !src.px[y * src.w + n2];
+            if (empty1 || empty2) out.px[y * src.w + x] = rim;
+          }
+        }
+      }
       c = this.toCanvas(out);
       this.cache.set(key, c);
     }
@@ -300,6 +320,8 @@ const SKY_INDEX: Record<Sky, number> = { dawn: 0, day: 1, sunset: 2, night: 3 };
 /** Sun with a stepped halo, or the moon in its phase with a faint glow. */
 export function drawOrb(p: Painter, sky: Sky, x: number, y: number, phase: number, glow?: GlowCanvas): void {
   if (sky === 'night') {
+    // at new moon there is nothing to see
+    if (moonLight(phase) < 0.04) return;
     const rad = 7;
     // glow: a dithered ring
     for (let dy = -rad - 3; dy <= rad + 3; dy++) {
@@ -344,6 +366,11 @@ export function drawOrb(p: Painter, sky: Sky, x: number, y: number, phase: numbe
   }
 }
 
+/** How much of the moon is lit, 0 at new moon to 1 at full moon. */
+export function moonLight(phase: number): number {
+  return (1 - Math.cos(phase * Math.PI * 2)) / 2;
+}
+
 /** Stars that twinkle, and now and then a shooting star. */
 export function drawStars(p: Painter, bottom: number, clock: number): void {
   for (let i = 0; i < 46; i++) {
@@ -376,8 +403,10 @@ export function orbPosition(p: Painter, arc: number, horizon: number, out: { x: 
 }
 
 /** Clouds in two layers: low, small and slow near the horizon; big and higher up, a little faster. */
-export function drawClouds(p: Painter, art: CloudArt, sky: Sky, grey: boolean, count: number, horizon: number, distance: number, clock: number): void {
+export function drawClouds(p: Painter, art: CloudArt, sky: Sky, grey: boolean, count: number, horizon: number, distance: number, clock: number, sunX: number): void {
   const tones = grey ? GREY_CLOUDS[sky] : SKIES[sky].clouds;
+  // a low sun lights the side of each cloud that faces it
+  const rim = grey ? 0 : SKIES[sky].cloudRim;
   const span = p.W + 140;
   for (let i = 0; i < count; i++) {
     const h = hash(i * 31 + 7);
@@ -385,17 +414,19 @@ export function drawClouds(p: Painter, art: CloudArt, sky: Sky, grey: boolean, c
     const speed = far ? 0.04 : 0.1;
     const x = Math.round(((((h % 997) * 3 - distance * speed - clock * (far ? 1.5 : 3)) % span) + span) % span) - 70;
     const y = far ? horizon - 14 - ((h >>> 10) % 22) : Math.round(horizon * (0.12 + ((h >>> 14) % 40) / 100));
-    const c = art.get(far ? (h >>> 4) % 2 : 2 + ((h >>> 4) % 4), tones);
+    const shape = far ? (h >>> 4) % 2 : 2 + ((h >>> 4) % 4);
+    const side = rim === 0 ? 0 : x + 30 < sunX ? 1 : -1;
+    const c = art.get(shape, tones, rim, side);
     p.ctx.drawImage(c, x, y - c.height);
   }
 }
 
 /** The sun's or moon's light on the water: short dashes in a column, flickering. */
-export function drawGlitter(p: Painter, x: number, top: number, bottom: number, color: number, clock: number): void {
+export function drawGlitter(p: Painter, x: number, top: number, bottom: number, color: number, clock: number, w0 = 3, w1 = 17): void {
   const t = Math.floor(clock * 6);
   for (let y = top; y < bottom; y += 2) {
     const k = (y - top) / Math.max(1, bottom - top);
-    const half = Math.round(3 + k * 14);
+    const half = Math.round(w0 + k * (w1 - w0));
     const row = (y >> 1) + t;
     for (let i = -half; i < half; i += 5) {
       if (((row + i) & 3) !== 0) continue;

@@ -17,9 +17,9 @@ import { t } from '../i18n/strings.ts';
 import { C, PALETTE, PALETTE_CSS } from './palette.ts';
 import { ARC, Environment } from '../env/environment.ts';
 import type { Sky } from '../env/sky.ts';
-import { DAYLIGHT, lightFor, lightPixels, type Light } from './light.ts';
+import { DAYLIGHT, LIGHTNING, lightFor, lightPixels, type Light } from './light.ts';
 import { WAVE_BANDS, WaveTiles, waterStep } from './waves.ts';
-import { CloudArt, FogCanvas, GlowCanvas, HORIZON_ABOVE_SEA, SKIES, SkyCanvas, drawClouds, drawGlitter, drawOrb, drawStars, drawWeatherFront, orbPosition } from './sky.ts';
+import { CloudArt, FogCanvas, GlowCanvas, HORIZON_ABOVE_SEA, SKIES, SkyCanvas, drawClouds, drawGlitter, drawOrb, drawStars, drawWeatherFront, moonLight, orbPosition } from './sky.ts';
 
 export type { Sky } from '../env/sky.ts';
 export { SKIES, HORIZON_ABOVE_SEA } from './sky.ts';
@@ -240,7 +240,9 @@ export class Renderer {
     const grey = look.grey;
     const k = SKIES[sky];
     const horizon = seaY - HORIZON_ABOVE_SEA;
-    this.light = lightFor(sky, grey);
+    // a lightning strike washes everything out for an instant
+    const flash = env.flash > 0.06;
+    this.light = flash ? LIGHTNING : lightFor(sky, grey);
     if (horizon > 0) this.ctx.drawImage(this.skyCanvas.get(sky, grey, W, horizon), 0, 0);
     if (k.stars && !grey) drawStars(this, horizon - 6, env.clock);
     if (!grey) {
@@ -248,13 +250,14 @@ export class Renderer {
       orbPosition(this, sky === env.sky ? env.arc : ARC[sky], horizon, this.orb);
       drawOrb(this, sky, this.orb.x, this.orb.y, env.moon, this.glowCanvas);
     }
-    drawClouds(this, this.cloudArt, sky, grey, look.clouds, horizon, distance, env.clock);
+    drawClouds(this, this.cloudArt, sky, grey, look.clouds, horizon, distance, env.clock, this.orb.x);
     // the far sea at the horizon, darker under rain clouds and darker still in a storm
     const dark = grey && sky !== 'night';
     const storm = dark && look.lightning;
     const far = dark ? C.deep : k.far;
-    const sea = storm ? C.deep : dark ? C.teal : k.sea;
-    const seaTop = storm ? C.teal : dark ? C.sea : k.seaTop;
+    const lit = flash ? 1 : 0;
+    const sea = waterStep(storm ? C.deep : dark ? C.teal : k.sea, lit);
+    const seaTop = waterStep(storm ? C.teal : dark ? C.sea : k.seaTop, lit);
     const mid = dark ? C.deep : k.mid;
     const deep = dark ? C.abyss : k.deep;
     this.fill(k.horizon, 0, horizon, W, 4);
@@ -268,7 +271,9 @@ export class Renderer {
       this.dashes(horizon + 12, 29, 3, distance * 0.25 + env.clock * 9, C.white);
       this.dashes(horizon + 22, 23, 4, distance * 0.4 + env.clock * 13, C.foamShadow);
     }
-    if (!grey) drawGlitter(this, this.orb.x, horizon + 5, seaY - 2, k.glitter, env.clock);
+    // the path of the sun or moon on the water (none under clouds, or without a moon)
+    const glitter = !grey && (sky !== 'night' || moonLight(env.moon) > 0.15);
+    if (glitter) drawGlitter(this, this.orb.x, horizon + 5, seaY - 2, k.glitter, env.clock);
     this.waterTone = sea;
     this.fill(sea, 0, seaY, W, H - seaY);
     this.fill(seaTop, 0, seaY, W, 4);
@@ -292,6 +297,8 @@ export class Renderer {
         if (body + 3 < waveBottom) this.dashes(body + 2, 43 + b * 14, 6 + b * 3, distance * band.speed + b * 29, k.seaDash[Math.min(2, b + 1)]);
       }
     }
+    // the path goes on, wider, over the near swells
+    if (glitter) drawGlitter(this, this.orb.x, seaY + 6, waveBottom, k.glitter, env.clock, 17, 40);
     if (depth > 90) {
       this.fill(mid, 0, seaY + 80, W, depth - 80);
       this.dashes(seaY + 80, 29, 14, distance * 1.4 + 7, sea);

@@ -53,6 +53,9 @@ export function lightFor(sky: Sky, overcast: boolean): Light {
 /** Clear daylight: the art exactly as drawn. */
 export const DAYLIGHT: Light = lightFor('day', false);
 
+/** A lightning strike: everything washed out in cold white for an instant. */
+export const LIGHTNING: Light = { id: 8, mul: [1.1, 1.12, 1.2], add: [52, 56, 74], grey: 0.45, ...NO_RIM };
+
 function clamp(v: number): number {
   return v < 0 ? 0 : v > 255 ? 255 : Math.round(v);
 }

@@ -39,17 +39,21 @@ Analisi fatta confrontando il gioco con giochi in pixel art premiati per la graf
 5. **Alone del sole retinato**: un alone a dithering radiale nel colore del cielo al posto degli anelli a righe, più un anello netto e il nucleo chiaro. All'alba il sole è dorato con un anello arancio, così si stacca dalla banda gialla.
 6. **Meteo** (fase 3): nebbia che vela davvero il cielo e nasconde il mare lontano (grigia di notte), mare più scuro col temporale.
 
-## Prossimi passi (non ancora fatti)
+## Seconda passata (fatta)
+
+- **Scia del sole e della luna** anche sul mare vicino, più larga sopra le onde. Non c'è sotto le nuvole di pioggia, né di notte se la luna è quasi nuova.
+- **Nuvole illuminate dal lato del sole** all'alba e al tramonto: due pixel dorati sul bordo che guarda il sole.
+- **Lampo che illumina la scena**: per un istante atleti, ostacoli e mare diventano bianchi e freddi (una luce `LIGHTNING` in più nella cache).
+- **Luna nuova invisibile**: niente disco scuro "bucato" nel cielo.
+- **Caustiche sott'acqua**: la rete di luce sotto la superficie e chiazze di luce sulla sabbia (apnea, pesca, Clic!).
+- Già presenti dal lavoro precedente: scuotimento e pausa alla caduta, fotogrammi di stacco e atterraggio, rampe dei colori con tinta spostata (ombre più fredde, luci più calde).
+
+## Idee ancora aperte
 
 | Idea | Riferimento | Impatto | Costo |
 |---|---|---|---|
-| Animazione: fotogrammi di anticipazione allo stacco, schiacciamento all'atterraggio, capelli che seguono il movimento | Celeste | alto | medio (nuovi fotogrammi in `compose.ts`) |
-| Scia di luce della luna e del sole sul mare vicino, non solo su quello lontano | Kingdom, Alto | medio | basso |
-| Nuvole illuminate dal lato del sole (bordo caldo al tramonto, grigio in basso) | Sea of Stars, Alto | medio | basso |
-| Lampo che illumina per un istante sprite e mare | Alto | medio | basso (una luce "flash" in più) |
-| Rampe della personalizzazione con spostamento di tinta (ombre più fredde, luci più calde) | Slynyrd | medio | medio (rivedere `ramps.ts`) |
-| Piccolo scuotimento dello schermo e pausa di un fotogramma alla caduta | Celeste, Dead Cells | medio | basso |
-| Caustiche e raggi di luce più ricchi sott'acqua (apnea, pesca, Clic!) | Sea of Stars | medio | medio |
+| Capelli e laccetti che seguono il movimento (movimento secondario) | Celeste | medio | medio (fotogrammi in `compose.ts`) |
+| Fotogramma "smear" nei trick veloci | animazione classica | basso | medio |
 
 ## Fonti
 

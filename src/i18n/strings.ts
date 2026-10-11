@@ -132,7 +132,12 @@ export const STRINGS = {
         missed: 'NOTHING IN THE PHOTO',
       },
       regatta: {
-        // regatta
+        tack: 'TACK!',
+        gybe: 'GYBE!',
+        rounded: 'MARK ROUNDED!',
+        wind: 'WIND',
+        touchHint: 'TAP TO TACK',
+        keyHint: 'SPACE TO TACK',
       },
       slalom: {
         jump: 'JUMP!',

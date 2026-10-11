@@ -3,6 +3,7 @@ import { AquariumScreen } from './aquarium.ts';
 import { FishingScreen } from './fishing.ts';
 import { FreediveScreen } from './freedive.ts';
 import { GullScreen } from './gull.ts';
+import { RegattaScreen } from './regatta.ts';
 import { SlalomScreen } from './slalom.ts';
 import { SnapScreen } from './snap.ts';
 import { SupScreen } from './sup.ts';
@@ -20,4 +21,5 @@ export function registerGames(ctx: Context, add: (id: ScreenId, screen: Screen) 
   add('snap', new SnapScreen(ctx));
   add('aquarium', new AquariumScreen(ctx));
   add('slalom', new SlalomScreen(ctx));
+  add('regatta', new RegattaScreen(ctx));
 }

@@ -154,7 +154,9 @@ export const STRINGS = {
         splash: 'SPLASH!',
       },
       aquarium: {
-        // aquarium
+        visitor: 'VISITOR OF THE DAY',
+        biggest: 'BIGGEST',
+        empty: 'CATCH FISH TO FILL YOUR TANK',
       },
     },
     modes: {

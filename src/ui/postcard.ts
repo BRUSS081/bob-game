@@ -91,6 +91,11 @@ export function drawPostcard(r: Renderer, run: PostcardRun): HTMLCanvasElement {
   return out;
 }
 
+/** A host page's save dialog, when the game runs inside one. */
+interface SaveHost {
+  use(name: 'downloads'): Promise<{ save(request: { filename: string; data: Blob }): Promise<unknown> } | null>;
+}
+
 /** Shares the postcard where the browser can (phones), otherwise downloads it. */
 export async function sharePostcard(r: Renderer, run: PostcardRun): Promise<void> {
   const canvas = drawPostcard(r, run);
@@ -105,6 +110,15 @@ export async function sharePostcard(r: Renderer, run: PostcardRun): Promise<void
       return;
     } catch {
       // cancelled or refused: fall back to a download
+    }
+  }
+  // inside a host page that offers its own save dialog (the claude.ai artifact viewer)
+  const host = (window as unknown as { claude?: SaveHost }).claude;
+  if (host && typeof host.use === 'function') {
+    const downloads = await host.use('downloads').catch(() => null);
+    if (downloads) {
+      await downloads.save({ filename: name, data: blob }).catch(() => {});
+      return;
     }
   }
   const url = URL.createObjectURL(blob);

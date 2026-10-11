@@ -150,7 +150,7 @@ export class HomeScreen implements Screen {
     const cardW = Math.min(W - 2 * margin - 2 * (12 * u + gap), 150 * u);
     const tagline = t.games[this.game].tagline;
     const tagH = 2 * (GLYPH_H + 3) * u;
-    const cardH = ICON * iconScale + 4 * u + (GLYPH_H + 3) * nameScale + tagH + 8 * u;
+    const cardH = ICON * iconScale + 4 * u + (GLYPH_H + 3) * nameScale + tagH + 11 * u;
     const rest = 2 * gap + cardH + gap + rowH + 2 * gap + rowH;
     const top = margin + rowH + gap;
     const title = GLYPH_H * 3 * u + rest > H - top - margin ? 2 * u : 3 * u;

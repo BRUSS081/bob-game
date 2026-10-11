@@ -5,7 +5,7 @@ import { GEAR_COLORS, HAIR_COLORS, LENS_COLORS, SKIN_TONES, type SlotRamps } fro
 export type CharacterId = 'bob' | 'bobba';
 export const CHARACTERS: readonly CharacterId[] = ['bob', 'bobba'];
 
-export const HAIR_STYLES = ['short', 'buzz', 'ponytail', 'long', 'bun', 'curly'] as const;
+export const HAIR_STYLES = ['short', 'mohawk', 'ponytail', 'long', 'bun', 'curly'] as const;
 export const SUIT_STYLES = ['full', 'shorty', 'rashguard'] as const;
 export const BOARD_ART = ['none', 'stripe', 'split', 'rails', 'dots'] as const;
 export const GEAR_PATTERNS = ['solid', 'split', 'stripes', 'tips'] as const;
@@ -74,6 +74,11 @@ export const OPTIONS: readonly OptionSpec[] = [
   { key: 'gearPattern', tab: 'gear', kind: 'style', count: GEAR_PATTERNS.length, none: false, sports: ['kite', 'wing'], names: GEAR_PATTERNS },
   { key: 'foil', tab: 'gear', kind: 'gear', count: GEAR_COLORS.length, none: false, sports: ['wing'] },
 ];
+
+/** Options of the athlete tab (the body): the same in every sport. Suit and gear stay per sport. */
+export const BODY_KEYS: readonly Exclude<OptionKey, 'character'>[] = OPTIONS.filter((o) => o.tab === 'athlete' && o.key !== 'character').map(
+  (o) => o.key as Exclude<OptionKey, 'character'>,
+);
 
 /** Gear color indices, named for readability. */
 const G = { black: 0, navy: 1, coral: 2, red: 3, gold: 4, orange: 5, green: 6, violet: 7, magenta: 8, sky: 9, white: 10 } as const;

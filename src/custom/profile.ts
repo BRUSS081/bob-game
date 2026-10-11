@@ -1,6 +1,6 @@
 import { load, save } from '../core/storage.ts';
 import { SPORTS, isSport, type SportId } from '../game/sport.ts';
-import { CHARACTERS, defaultConfig, sanitize, type AthleteConfig, type CharacterId } from './athlete.ts';
+import { BODY_KEYS, CHARACTERS, defaultConfig, sanitize, type AthleteConfig, type CharacterId } from './athlete.ts';
 
 type PerSport<T> = Record<SportId, T>;
 
@@ -32,6 +32,18 @@ export class Profile {
       const b = load<unknown>(`bob.best.${s}`, 0);
       this.best[s] = typeof b === 'number' && Number.isFinite(b) && b > 0 ? Math.floor(b) : 0;
     }
+    // the body is shared: older saves may differ per sport, the current sport wins
+    for (const ch of CHARACTERS) this.copyBody(this.sport, ch);
+  }
+
+  /** Copies the body options of one sport's look to the same rider in the other sports. */
+  private copyBody(from: SportId, character: CharacterId): void {
+    const src = this.looks[from][character];
+    for (const s of SPORTS) {
+      if (s === from) continue;
+      const dst = this.looks[s][character];
+      for (const key of BODY_KEYS) dst[key] = src[key];
+    }
   }
 
   /** The look in use for a sport (the current one by default). */
@@ -49,8 +61,10 @@ export class Profile {
     save('bob.rider', character);
   }
 
+  /** Saves the look of the current rider; the body goes to every sport. */
   saveLook(sport: SportId = this.sport): void {
-    for (const ch of CHARACTERS) save(`bob.look.${sport}.${ch}`, this.looks[sport][ch]);
+    this.copyBody(sport, this.rider);
+    for (const s of SPORTS) save(`bob.look.${s}.${this.rider}`, this.looks[s][this.rider]);
   }
 
   setBest(sport: SportId, best: number): void {

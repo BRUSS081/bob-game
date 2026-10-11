@@ -225,8 +225,7 @@ export class PlayScreen implements Screen {
         break;
       case 'paused': {
         let py = mid - 20 * u;
-        py += r.centered(t.paused, W / 2, py, C.white, 2 * u) + 2 * u;
-        py += r.centered(r.touch ? t.resumeTouch : t.resumeDesktop, W / 2, py, C.skyPale, u) + 3 * u;
+        py += r.centered(t.paused, W / 2, py, C.white, 2 * u) + 4 * u;
         this.buttons(py, t.resume);
         break;
       }
@@ -240,8 +239,7 @@ export class PlayScreen implements Screen {
         oy += (GLYPH_H + 4) * 2 * u;
         if (g.newBest) oy += r.centered(t.newBest, W / 2, oy, C.gold, u);
         if (g.overTime >= g.cfg.restartDelay) {
-          oy += r.centered(r.touch ? t.restartTouch : t.restartDesktop, W / 2, oy + u, C.white, u) + 3 * u;
-          this.buttons(oy, t.again);
+          this.buttons(oy + 2 * u, t.again);
         } else {
           setRect(this.leftRect, 0, 0, 0, 0);
           setRect(this.rightRect, 0, 0, 0, 0);

@@ -51,7 +51,9 @@ describe('profile', () => {
     expect(q.look().character).toBe('bobba');
     expect(q.look().helmet).toBe(3);
     expect(q.looks.kite.bob.helmet).toBe(-1);
-    expect(q.looks.surf.bobba.helmet).toBe(-1);
+    // the body is shared by every sport, suit and gear are not
+    expect(q.looks.surf.bobba.helmet).toBe(3);
+    expect(q.looks.wing.bobba.helmet).toBe(3);
     expect(q.best.wing).toBe(1234);
   });
 
@@ -86,6 +88,28 @@ describe('profile', () => {
       p.setBest('wing', 10);
     }).not.toThrow();
     expect(p.sport).toBe('wing');
+  });
+});
+
+describe('shared body', () => {
+  it('body options follow the rider in every sport, suit and gear stay per sport', () => {
+    const p = new Profile();
+    p.setSport('surf');
+    p.setRider('bob');
+    p.look().skin = 4;
+    p.look().hairStyle = 5;
+    p.look().board = 7;
+    p.look().suitA = 8;
+    p.saveLook();
+    const q = new Profile();
+    for (const sport of SPORTS) {
+      expect(q.looks[sport].bob.skin).toBe(4);
+      expect(q.looks[sport].bob.hairStyle).toBe(5);
+      expect(q.looks[sport].bobba.skin).toBe(defaultConfig('bobba', sport).skin);
+    }
+    expect(q.looks.surf.bob.board).toBe(7);
+    expect(q.looks.kite.bob.board).toBe(defaultConfig('bob', 'kite').board);
+    expect(q.looks.wing.bob.suitA).toBe(defaultConfig('bob', 'wing').suitA);
   });
 });
 

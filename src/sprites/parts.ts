@@ -56,16 +56,14 @@ export const HAIR: readonly (readonly string[])[] = [
     '...hhh..........',
     '...hh...........',
   ],
-  // buzz
+  // mohawk: a spiky crest from the forehead to the nape, shaved sides
   [
-    '................',
-    '................',
-    '................',
-    '.....hhhhh......',
-    '....hhhhhhhh....',
+    '....h...h.......',
+    '...hhh.hhh.h....',
+    '...hhhhhhhhhh...',
     '...hhhhhhhhh....',
-    '...hhhhh........',
-    '...hhh..........',
+    '...hh...........',
+    '...h............',
   ],
   // ponytail: high, streaming back in the wind
   [

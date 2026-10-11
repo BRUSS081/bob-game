@@ -119,7 +119,10 @@ export const STRINGS = {
         // slalom
       },
       wreck: {
-        // wreck
+        slipped: 'SLIPPED!',
+        clean: 'CLEAN SEA',
+        treasures: 'TREASURES',
+        last: 'LAST HAUL!',
       },
       raft: {
         // raft

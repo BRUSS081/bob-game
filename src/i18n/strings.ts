@@ -127,7 +127,9 @@ export const STRINGS = {
         hint: 'HOLD TO DIVE',
       },
       snap: {
-        // snap
+        best: 'BEST PHOTO',
+        rollDone: 'ROLL FINISHED',
+        missed: 'NOTHING IN THE PHOTO',
       },
       regatta: {
         // regatta

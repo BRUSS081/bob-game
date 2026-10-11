@@ -8,6 +8,7 @@ import type { Profile } from '../custom/profile.ts';
 import type { Athlete } from '../game/athletes.ts';
 import type { SportId } from '../game/sport.ts';
 import type { Renderer } from '../render/renderer.ts';
+import type { ActorKind } from '../sprites/actor.ts';
 import type { AthleteSprites } from '../sprites/sheet.ts';
 
 export type ScreenId = 'home' | 'customize' | 'game' | 'missions' | 'album' | 'setup' | 'tour' | MiniGameId;
@@ -23,6 +24,8 @@ export interface Context {
   player(): AthleteSprites;
   /** Sprites for any look (LRU cached). */
   sprites(config: AthleteConfig, sport: SportId, spins?: boolean): AthleteSprites;
+  /** BOB or BOBBA (the current look) in the poses of the other games. */
+  actor(kind: ActorKind, config?: AthleteConfig): readonly HTMLCanvasElement[];
   /** A riding athlete that plays by itself, one per sport (home and menus). */
   demo(sport: SportId): Athlete;
   /** Call after changing the sport, the rider or the look. */

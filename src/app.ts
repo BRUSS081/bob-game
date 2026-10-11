@@ -2,6 +2,7 @@ import type { Display } from './core/display.ts';
 import type { Input } from './core/input.ts';
 import type { AthleteConfig } from './custom/athlete.ts';
 import { Album } from './custom/album.ts';
+import { registerGames } from './games/index.ts';
 import { MissionLog } from './custom/missions.ts';
 import type { RunMode } from './game/modes.ts';
 import { Profile } from './custom/profile.ts';
@@ -9,7 +10,8 @@ import { createAthlete, type Athlete } from './game/athletes.ts';
 import { surfaceY } from './game/config.ts';
 import type { SportId } from './game/sport.ts';
 import { Renderer } from './render/renderer.ts';
-import { SpriteCache, type AthleteSprites } from './sprites/sheet.ts';
+import type { ActorKind } from './sprites/actor.ts';
+import { ActorCache, SpriteCache, type AthleteSprites } from './sprites/sheet.ts';
 import { CustomizeScreen } from './ui/customize.ts';
 import { HomeScreen } from './ui/home.ts';
 import { MissionsScreen } from './ui/missions.ts';
@@ -32,6 +34,7 @@ export class App implements Context {
   readonly profile = new Profile(this.missions.unlocked);
   private readonly display: Display;
   private readonly cache = new SpriteCache(12);
+  private readonly actors = new ActorCache(10);
   private readonly demos = {} as Record<SportId, Athlete>;
   private playerSprites: AthleteSprites | null = null;
   private readonly screens: Partial<Record<ScreenId, Screen>>;
@@ -54,12 +57,18 @@ export class App implements Context {
       setup: new SetupScreen(this),
       tour: new TourScreen(this),
     };
+    registerGames(this, (id, screen) => this.addScreen(id, screen));
     this.screen = this.screens.home as Screen;
     this.screen.enter();
   }
 
   get current(): ScreenId {
     return this.screenId;
+  }
+
+  /** The active screen (development console). */
+  get active(): Screen {
+    return this.screen;
   }
 
   /** The run in progress (development console). */
@@ -74,6 +83,10 @@ export class App implements Context {
 
   sprites(config: AthleteConfig, sport: SportId, spins = true): AthleteSprites {
     return this.cache.get(config, sport, spins);
+  }
+
+  actor(kind: ActorKind, config: AthleteConfig = this.profile.look('surf')): readonly HTMLCanvasElement[] {
+    return this.actors.get(config, kind);
   }
 
   demo(sport: SportId): Athlete {

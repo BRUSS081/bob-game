@@ -12,6 +12,7 @@ import {
   rotateFrame,
   type FrameName,
 } from './compose.ts';
+import { composeActor, type ActorKind } from './actor.ts';
 import { buildLut } from './ramps.ts';
 import type { Raster } from './raster.ts';
 
@@ -97,6 +98,37 @@ function build(c: AthleteConfig, sport: SportId, withSpins: boolean): AthleteSpr
     }
   }
   return { frames, spins, kite, kiteTipL: tipL, kiteTipR: tipR, barTop: frameInfo(sport, 'ride0').barTop };
+}
+
+/**
+ * Poses away from the runner (paddling, fishing, swimming, standing,
+ * surfing slopes), per look and kind, built on first use. A few looks at most.
+ */
+export class ActorCache {
+  private readonly cache = new Map<string, readonly HTMLCanvasElement[]>();
+  private readonly limit: number;
+
+  constructor(limit = 10) {
+    this.limit = limit;
+  }
+
+  get(config: AthleteConfig, kind: ActorKind): readonly HTMLCanvasElement[] {
+    const key = configKey(config, 'surf') + ':' + kind;
+    const hit = this.cache.get(key);
+    if (hit) {
+      this.cache.delete(key);
+      this.cache.set(key, hit);
+      return hit;
+    }
+    const lut = buildLut(resolveRamps(config));
+    const built = composeActor(config, kind).map((r) => toCanvas(r, lut));
+    this.cache.set(key, built);
+    if (this.cache.size > this.limit) {
+      const oldest = this.cache.keys().next().value;
+      if (oldest !== undefined) this.cache.delete(oldest);
+    }
+    return built;
+  }
 }
 
 export { FRAME_W, FRAME_H, KITE_W, KITE_H };

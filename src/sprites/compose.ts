@@ -17,7 +17,7 @@ export const PIVOT_Y = ANCHOR_Y - 22;
 export type FrameName = 'ride0' | 'ride1' | 'ride2' | 'ride3' | 'takeoff' | 'air' | 'land' | 'fall';
 export const FRAME_NAMES: readonly FrameName[] = ['ride0', 'ride1', 'ride2', 'ride3', 'takeoff', 'air', 'land', 'fall'];
 
-type P = readonly [number, number];
+export type P = readonly [number, number];
 
 /** Joint positions relative to the anchor (x right, y up is negative). `head` is the head's top-left corner. */
 export interface Pose {
@@ -146,12 +146,12 @@ export function poseFor(sport: SportId, frame: FrameName): Pose {
 
 // ------------------------------------------------------------------ helpers
 
-function at(p: P, dx = 0, dy = 0): [number, number] {
+export function at(p: P, dx = 0, dy = 0): [number, number] {
   return [ANCHOR_X + p[0] + dx, ANCHOR_Y + p[1] + dy];
 }
 
 /** Stamps a round-ish square brush along a line. */
-function stroke(r: Raster, a: P, b: P, width: number, c: number): void {
+export function stroke(r: Raster, a: P, b: P, width: number, c: number): void {
   const [x0, y0] = at(a);
   const [x1, y1] = at(b);
   const steps = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0), 1);
@@ -170,7 +170,7 @@ function stroke(r: Raster, a: P, b: P, width: number, c: number): void {
 }
 
 /** Light on top and right edges, shadow on bottom and left edges, for pixels of one ramp's mid tone. */
-function shade(part: Raster, base: number): void {
+export function shade(part: Raster, base: number): void {
   const src = Uint8Array.from(part.px);
   const empty = (x: number, y: number) => x < 0 || y < 0 || x >= part.w || y >= part.h || src[y * part.w + x] === 0;
   for (let y = 0; y < part.h; y++) {
@@ -186,7 +186,7 @@ function shade(part: Raster, base: number): void {
  * Composites a part over the frame. Edge pixels of the part that sit on
  * already-drawn pixels turn to their shadow tone, separating overlapping limbs.
  */
-function composite(frame: Raster, part: Raster, separate: boolean): void {
+export function composite(frame: Raster, part: Raster, separate: boolean): void {
   const w = part.w;
   for (let y = 0; y < part.h; y++) {
     for (let x = 0; x < w; x++) {
@@ -206,11 +206,11 @@ function composite(frame: Raster, part: Raster, separate: boolean): void {
   }
 }
 
-function newPart(): Raster {
+export function newPart(): Raster {
   return new Raster(FRAME_W, FRAME_H);
 }
 
-function blitRows(r: Raster, rows: readonly string[], x: number, y: number, legend: Record<string, number>): void {
+export function blitRows(r: Raster, rows: readonly string[], x: number, y: number, legend: Record<string, number>): void {
   rows.forEach((row, j) => {
     for (let i = 0; i < row.length; i++) {
       const c = legend[row[i]];
@@ -219,7 +219,7 @@ function blitRows(r: Raster, rows: readonly string[], x: number, y: number, lege
   });
 }
 
-const S = (name: SlotName, tone: number) => SLOT[name] + tone;
+export const S = (name: SlotName, tone: number) => SLOT[name] + tone;
 
 // ------------------------------------------------------------------ boards and gear
 
@@ -363,7 +363,7 @@ const TORSO_BOBBA: { front: readonly P[]; back: readonly P[] } = {
   back: [[1, 2.9], [0.55, 2], [0.38, 2], [0, 3.6]],
 };
 
-function torso(frame: Raster, p: Pose, c: AthleteConfig, sport: SportId): void {
+function torso(frame: Raster, p: Pose, c: AthleteConfig, harness: boolean): void {
   const [hx, hy] = p.hip;
   const [cx, cy] = p.chest;
   const dx = cx - hx;
@@ -378,7 +378,6 @@ function torso(frame: Raster, p: Pose, c: AthleteConfig, sport: SportId): void {
   const part = newPart();
   const style = SUIT_STYLES[c.suitStyle];
   part.polygon(outlinePts, style === 'bikini' ? S('skin', MID) : S('suitA', MID));
-  const harness = sport !== 'surf';
   const [ax, ay] = at(p.hip);
   for (let y = 0; y < FRAME_H; y++) {
     for (let x = 0; x < FRAME_W; x++) {
@@ -434,7 +433,7 @@ function head(frame: Raster, p: Pose, c: AthleteConfig): void {
 }
 
 /** Ink outline; along the top edge it uses the shadow tone of the pixel below, so the lit side stays soft. */
-function outline(frame: Raster): void {
+export function outline(frame: Raster): void {
   const src = Uint8Array.from(frame.px);
   const w = frame.w;
   const get = (x: number, y: number) => (x < 0 || y < 0 || x >= w || y >= frame.h ? 0 : src[y * w + x]);
@@ -451,7 +450,7 @@ function outline(frame: Raster): void {
 }
 
 /** Replaces single stray pixels whose four neighbours agree on another color. */
-function cleanOrphans(frame: Raster): void {
+export function cleanOrphans(frame: Raster): void {
   const src = Uint8Array.from(frame.px);
   const w = frame.w;
   for (let y = 1; y < frame.h - 1; y++) {
@@ -480,10 +479,34 @@ export interface FrameInfo {
 export function composeFrame(c: AthleteConfig, sport: SportId, frame: FrameName): Raster {
   if (frame === 'fall') return rotateFrame(composeFrame(c, sport, 'air'), (75 * Math.PI) / 180);
   const p = poseFor(sport, frame);
-  const cov = coverage(c);
   const f = new Raster(FRAME_W, FRAME_H);
-
   drawBoard(f, sport, c);
+  drawBody(f, p, c, sport !== 'surf', (fr) => {
+    // gear held in front, under the front arm
+    if (sport === 'wing') {
+      const wing = newPart();
+      drawWing(wing, p, c);
+      composite(fr, wing, false);
+    }
+    if (sport === 'kite') {
+      const [bx, by] = at(p.handF, 1, -4);
+      for (let y = by; y <= by + 7; y++) fr.set(bx, y, C.grey);
+      fr.set(bx, by, C.ink);
+      fr.set(bx, by + 7, C.ink);
+    }
+  });
+  cleanOrphans(f);
+  outline(f);
+  return f;
+}
+
+/**
+ * Draws the athlete's body in a pose: back arm and leg, torso, front leg,
+ * head, then `held` (gear in the hands) and the front arm over it. No
+ * outline: the caller adds props, then cleans and outlines the frame.
+ */
+export function drawBody(f: Raster, p: Pose, c: AthleteConfig, harness: boolean, held?: (f: Raster) => void): void {
+  const cov = coverage(c);
   // BOBBA has slimmer arms
   const arm = c.character === 'bob' ? 3 : 2;
   // back arm, back leg
@@ -494,7 +517,7 @@ export function composeFrame(c: AthleteConfig, sport: SportId, frame: FrameName)
   limb(f, p.kneeB, p.footB, 3, cov.shin);
   blob(f, p.footB, 4, 2, 'skin', -2, 0);
   // torso, front leg
-  torso(f, p, c, sport);
+  torso(f, p, c, harness);
   limb(f, p.hip, p.kneeF, 4, cov.thigh);
   limb(f, p.kneeF, p.footF, 3, cov.shin);
   blob(f, p.footF, 4, 2, 'skin', -1, 0);
@@ -506,25 +529,10 @@ export function composeFrame(c: AthleteConfig, sport: SportId, frame: FrameName)
   // neck and head
   limb(f, [p.head[0] + 4, p.head[1] + 9], p.chest, 2, 'skin');
   head(f, p, c);
-  // gear held in front, then the front arm over it
-  if (sport === 'wing') {
-    const wing = newPart();
-    drawWing(wing, p, c);
-    composite(f, wing, false);
-  }
-  if (sport === 'kite') {
-    const [bx, by] = at(p.handF, 1, -4);
-    for (let y = by; y <= by + 7; y++) f.set(bx, y, C.grey);
-    f.set(bx, by, C.ink);
-    f.set(bx, by + 7, C.ink);
-  }
+  held?.(f);
   limb(f, p.chest, p.elbowF, arm, cov.upperArm);
   limb(f, p.elbowF, p.handF, 2, cov.foreArm);
   blob(f, p.handF, 2, 2, 'skin', -1, -1);
-
-  cleanOrphans(f);
-  outline(f);
-  return f;
 }
 
 /** Kite bar ends for a frame, so lines can be drawn to the kite. */

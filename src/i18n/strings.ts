@@ -33,6 +33,107 @@ export const STRINGS = {
       gull: { name: 'GULL', tagline: "STEAL THE FISHERMEN'S LUNCH", hints: ['TAP TO FLAP', 'GRAB THE FISH ON THE BOATS'] },
       aquarium: { name: 'AQUARIUM', tagline: 'YOUR FISH AND YOUR SHELLS', hints: ['TAP A FISH TO SEE ITS NAME', 'TAP THE WATER TO FEED THEM'] },
     },
+    creatures: {
+      sardine: 'SARDINE',
+      mackerel: 'MACKEREL',
+      bream: 'SEA BREAM',
+      bass: 'SEA BASS',
+      clownfish: 'CLOWNFISH',
+      tang: 'BLUE TANG',
+      butterflyfish: 'BUTTERFLYFISH',
+      angelfish: 'ANGELFISH',
+      parrotfish: 'PARROTFISH',
+      lionfish: 'LIONFISH',
+      pufferfish: 'PUFFERFISH',
+      moray: 'MORAY EEL',
+      flyingfish: 'FLYING FISH',
+      tuna: 'TUNA',
+      mahimahi: 'MAHI-MAHI',
+      barracuda: 'BARRACUDA',
+      grouper: 'GROUPER',
+      snapper: 'RED SNAPPER',
+      trevally: 'TREVALLY',
+      swordfish: 'SWORDFISH',
+      marlin: 'MARLIN',
+      anglerfish: 'ANGLERFISH',
+      lanternfish: 'LANTERNFISH',
+      sunfish: 'SUNFISH',
+      shark: 'REEF SHARK',
+      turtle: 'SEA TURTLE',
+      manta: 'MANTA RAY',
+      octopus: 'OCTOPUS',
+      jelly: 'JELLYFISH',
+      seahorse: 'SEAHORSE',
+      dolphin: 'DOLPHIN',
+      squid: 'SQUID',
+      crab: 'CRAB',
+      star: 'STARFISH',
+    } as Record<string, string>,
+    treasures: {
+      coin: 'GOLD COIN',
+      bottle: 'MESSAGE IN A BOTTLE',
+      anchor: 'OLD ANCHOR',
+      compass: 'COMPASS',
+      spyglass: 'SPYGLASS',
+      amphora: 'AMPHORA',
+      bell: "SHIP'S BELL",
+      pearl: 'PEARL',
+      chest: 'TREASURE CHEST',
+      crown: 'CROWN',
+      boot: 'OLD BOOT',
+      can: 'CAN',
+      net: 'LOST NET',
+    } as Record<string, string>,
+    rarity: ['', 'COMMON', 'UNCOMMON', 'RARE', 'LEGENDARY'],
+    albumTabs: { fish: 'FISH', photos: 'PHOTOS', treasures: 'TREASURES' },
+    shells: 'SHELLS',
+    unknown: '???',
+    cm: 'CM',
+    seen: 'SEEN',
+    // words used inside each game (one block per game)
+    gameText: {
+      sup: {
+        places: ['1ST', '2ND', '3RD', '4TH'],
+        of: 'OF 4',
+        perfect: 'PERFECT!',
+        good: 'GOOD',
+        splash: 'SPLASH',
+        sprint: 'SPRINT!',
+      },
+      swells: {
+        // swells
+      },
+      fishing: {
+        // fishing
+      },
+      freedive: {
+        // freedive
+      },
+      snap: {
+        // snap
+      },
+      regatta: {
+        // regatta
+      },
+      slalom: {
+        // slalom
+      },
+      wreck: {
+        // wreck
+      },
+      raft: {
+        // raft
+      },
+      reef: {
+        // reef
+      },
+      gull: {
+        // gull
+      },
+      aquarium: {
+        // aquarium
+      },
+    },
     modes: {
       endless: { name: 'ENDLESS', desc: 'THE CLASSIC: AS FAR AS YOU CAN' },
       daily: { name: 'DAILY', desc: "TODAY'S RUN, THE SAME FOR EVERYONE" },

@@ -5,6 +5,8 @@ import { DOLPHIN_COUNT, type Dolphins } from '../game/dolphins.ts';
 import type { Obstacle, ObstacleName } from '../game/obstacles.ts';
 import type { SportId } from '../game/sport.ts';
 import { ANCHOR_X, ANCHOR_Y, FRAME_H, FRAME_W, type FrameName } from '../sprites/compose.ts';
+import { treasureRaster } from '../games/treasures.ts';
+import { CreatureCache } from '../sprites/fish.ts';
 import { ICON, iconRaster, type IconName } from '../sprites/icons.ts';
 import { dolphinRasters, powerRaster, propRasters } from '../sprites/props.ts';
 import type { Ramp } from '../sprites/ramps.ts';
@@ -133,7 +135,8 @@ export interface PoseView {
 
 export type ButtonStyle = 'primary' | 'normal' | 'selected' | 'ghost';
 
-function rasterCanvas(r: Raster): HTMLCanvasElement {
+/** A canvas with a raster's palette colors (palette indices only, no customization slots). */
+export function rasterCanvas(r: Raster): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
   canvas.width = r.w;
   canvas.height = r.h;
@@ -178,6 +181,9 @@ export class Renderer {
   private dolphinCanvases: HTMLCanvasElement[] | null = null;
   private readonly icons = new Map<IconName, HTMLCanvasElement>();
   private readonly ghosts = new WeakMap<AthleteSprites, AthleteSprites>();
+  /** Fish and the other sea creatures, built on first use. */
+  readonly creatures = new CreatureCache(rasterCanvas);
+  private readonly treasureCanvases = new Map<string, HTMLCanvasElement>();
 
   constructor(display: Display) {
     this.display = display;
@@ -626,6 +632,23 @@ export class Renderer {
     const left = Math.round(r.x + (r.w - 5 * scale) / 2);
     this.fill(C.white, left, top, 2 * scale, h);
     this.fill(C.white, left + 3 * scale, top, 2 * scale, h);
+  }
+
+  /** A treasure (or junk) centered on (x, y). */
+  treasure(id: string, x: number, y: number, scale = 1): void {
+    let c = this.treasureCanvases.get(id);
+    if (!c) {
+      c = rasterCanvas(treasureRaster(id));
+      this.treasureCanvases.set(id, c);
+    }
+    this.ctx.drawImage(c, Math.round(x - (c.width * scale) / 2), Math.round(y - (c.height * scale) / 2), c.width * scale, c.height * scale);
+  }
+
+  /** A sea creature centered on (x, y); `frame` 0 or 1, `left` mirrors it. */
+  creature(id: string, x: number, y: number, frame: number, left: boolean, scale = 1): void {
+    const art = this.creatures.get(id);
+    const c = art.canvases[(left ? 2 : 0) + (frame & 1)];
+    this.ctx.drawImage(c, Math.round(x - (art.w * scale) / 2), Math.round(y - (art.h * scale) / 2), art.w * scale, art.h * scale);
   }
 
   /** A 16×16 icon, scaled by whole pixels. */

@@ -1,4 +1,6 @@
 import { isGameKey } from '../core/input.ts';
+import type { Rng } from '../core/rng.ts';
+import { CHARACTERS, defaultConfig, randomize, type AthleteConfig } from '../custom/athlete.ts';
 import { t } from '../i18n/strings.ts';
 import { ADVANCE, GLYPH_H, digitCount } from '../render/font.ts';
 import { C } from '../render/palette.ts';
@@ -15,6 +17,28 @@ export interface OverLine {
 
 /** Seconds before AGAIN works after the end, so a late tap does not restart at once. */
 const RESTART_DELAY = 0.6;
+/** How long a floating text stays up. */
+export const POPUP_TIME = 0.9;
+const POPUPS = 8;
+
+interface Popup {
+  text: string;
+  x: number;
+  y: number;
+  color: number;
+  age: number;
+}
+
+/** Random looks for rivals and crew, BOB and BOBBA alternating. */
+export function rivalLooks(n: number, rng: Rng): AthleteConfig[] {
+  const out: AthleteConfig[] = [];
+  for (let i = 0; i < n; i++) {
+    const c = defaultConfig(CHARACTERS[i % 2], 'surf');
+    randomize(c, 'surf', rng);
+    out.push(c);
+  }
+  return out;
+}
 
 /**
  * Everything the small games share: a start card with the controls, the
@@ -42,9 +66,22 @@ export abstract class MiniGame implements Screen {
   private readonly leftRect = newRect();
   private readonly rightRect = newRect();
   private readonly panelRect = newRect();
+  private readonly popups: Popup[] = [];
 
   constructor(ctx: Context) {
     this.ctx = ctx;
+    for (let i = 0; i < POPUPS; i++) this.popups.push({ text: '', x: 0, y: 0, color: C.white, age: POPUP_TIME });
+  }
+
+  /** A short text that floats up from (x, y) and fades: points, PERFECT!, NEW!... */
+  protected popup(text: string, x: number, y: number, color: number = C.white): void {
+    let slot = this.popups[0];
+    for (const p of this.popups) if (p.age > slot.age) slot = p;
+    slot.text = text;
+    slot.x = x;
+    slot.y = y;
+    slot.color = color;
+    slot.age = 0;
   }
 
   /** Race times: lower is better, and the score shows as seconds. */
@@ -62,6 +99,7 @@ export abstract class MiniGame implements Screen {
     this.overLines.length = 0;
     this.time = 0;
     this.score = 0;
+    for (const p of this.popups) p.age = POPUP_TIME;
     this.reset();
     this.phase = this.scored ? 'ready' : 'running';
     this.pressed = false;
@@ -127,6 +165,7 @@ export abstract class MiniGame implements Screen {
           this.overLines.length = 0;
           this.time = 0;
           this.score = 0;
+          for (const p of this.popups) p.age = POPUP_TIME;
           this.reset();
           this.phase = 'running';
           this.start();
@@ -134,6 +173,7 @@ export abstract class MiniGame implements Screen {
         return;
       case 'running':
         this.time += dt;
+        for (const p of this.popups) if (p.age < POPUP_TIME) p.age += dt;
         this.step(dt, pressed, this.ctx.input.held);
     }
   }
@@ -178,6 +218,10 @@ export abstract class MiniGame implements Screen {
     const r = this.ctx.r;
     this.draw(this.phase === 'running' ? alpha : 1);
     const u = r.u;
+    for (const p of this.popups) {
+      if (p.age >= POPUP_TIME || (p.age > POPUP_TIME * 0.7 && Math.floor(p.age * 20) % 2 === 0)) continue;
+      r.centered(p.text, p.x, Math.round(p.y - p.age * 14 * u), p.color, u);
+    }
     const margin = 6;
     const size = (GLYPH_H + 7) * u;
     if (this.phase === 'running') r.pauseButton(setRect(this.pauseRect, margin, margin, size, size), u);

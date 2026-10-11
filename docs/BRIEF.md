@@ -125,6 +125,13 @@ Le tre modalità devono avere difficoltà simile. Dopo i playtest proponimi tu g
 - Effetti: fermo immagine e scossa alla caduta, moltiplicatore combo che pulsa.
 - Cartolina pixel art di fine partita da condividere o scaricare.
 
+### Modalità e altri giochi (approvati dall'utente)
+- La home è un carosello di giochi, uno alla volta (icona, nome, una riga), con GIOCA; sotto solo ASPETTO, MISSIONI e ALBUM. Il runner apre una schermata di scelta: sport e modalità.
+- Modalità del runner: Infinita, Sfida del giorno, Triathlon (cambia sport ogni 40 s), 60 secondi (niente game over, cadere costa 2 s), Onda gigante (un'onda insegue), Giro del mondo (12 spot con 3 stelle), Free ride (niente ostacoli né punteggio). Un record per modalità.
+- Altri giochi con BOB / BOBBA, tutti a un tasto o quasi, in mare aperto: Onde lunghe, Pesca, Apnea, Clic! (foto), Gara SUP, Regata, Surf dall'alto (sterzo con frecce o metà schermo), Gancio del relitto, Zattera, Difendi la barriera, Gabbiano, Acquario (senza punteggio). Un record per gioco (`bob.best.<gioco>`).
+- Album condiviso (`bob.album`): pesci pescati con taglia, foto con stelle, creature viste, tesori, conchiglie. 34 creature e 13 tesori disegnati in codice.
+- Dettagli e stato delle idee: `docs/IDEE.md`.
+
 ### Schermate
 - Home: scelta dello sport, BOB / BOBBA, gioca, sfida del giorno, missioni, personalizzazione, classifica, impostazioni. Sullo sfondo l'atleta animato con ora e meteo live.
 - Personalizzazione, tutto sbloccato da subito:

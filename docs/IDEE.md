@@ -8,16 +8,18 @@ Vincoli che valgono anche qui: tutto in mare aperto (niente terraferma), pixel a
 
 | Modalità | Stato | In breve |
 |---|---|---|
-| Triathlon | approvata | Una run che cambia sport ogni ~40 s (surf → kite → wing → di nuovo, più veloce), con transizione tra le tavole. |
-| 60 secondi | approvata | Un minuto senza game over: cadere costa la combo e 2 s. Contano trick, al pelo e delfini. |
-| Onda gigante | approvata | Un'onda enorme insegue da sinistra: drag e atterraggi sbagliati rallentano, i trick fanno allungare. Se ti prende è wipeout. |
-| Giro del mondo | approvata, dopo la fase 3 | 12 "spot" con obiettivi ("arriva a 1500", "5 trick", "passa 3 barche") e fino a 3 stelle, ognuno con la sua ora e il suo meteo. |
-| Free ride | approvata, dopo la fase 3 | Nessun ostacolo e nessun punteggio: cavalcare, trick e panorama. |
+| Triathlon | fatta | Una run che cambia sport ogni ~40 s (surf → kite → wing → di nuovo, più veloce), con transizione tra le tavole. |
+| 60 secondi | fatta | Un minuto senza game over: cadere costa la combo e 2 s. Contano trick, al pelo e delfini. |
+| Onda gigante | fatta | Un'onda enorme insegue da sinistra: drag e atterraggi sbagliati rallentano, i trick fanno allungare. Se ti prende è wipeout. |
+| Giro del mondo | fatta (cielo per spot; il meteo arriva con la fase 3) | 12 "spot" con obiettivi ("arriva a 1500", "5 trick", "passa 3 barche") e fino a 3 stelle, ognuno con la sua ora e il suo meteo. |
+| Free ride | fatta | Nessun ostacolo e nessun punteggio: cavalcare, trick e panorama. |
 | Duello | scartata dall'utente | Due giocatori sullo stesso schermo. |
 
-Nella home: una riga "MODALITÀ" con le frecce, come quella dello sport. Un record per modalità; in fase 6 una classifica per modalità.
+Fatto diversamente da come proposto: la home è un carosello di giochi e il runner apre una schermata con sport e modalità. Un record per modalità; in fase 6 una classifica per modalità.
 
 ## Altri giochi con BOB e BOBBA
+
+Tutti fatti su richiesta dell'utente ("implementale tutte, ma senza una home piena e confusa"), in attesa del suo ok dopo la prova. Uno per file in `src/games/`.
 
 ### Primo gruppo (proposto il 2026-10-11)
 
@@ -77,10 +79,8 @@ Nella home: una riga "MODALITÀ" con le frecce, come quella dello sport. Un reco
 - **Stesso BOB / BOBBA** personalizzato in ogni gioco; colori speciali sbloccabili anche dagli altri giochi.
 - **Home come menu dei giochi**, con il runner come primo. In alternativa una piattaforma galleggiante dove vivono BOB e BOBBA, da cui si sceglie il gioco.
 
-## Ordine proposto (da confermare)
+## Stato (2026-10-11)
 
-1. Triathlon, 60 secondi, Onda gigante.
-2. Fase 3: ambiente (mare, cielo, ora reale, meteo), utile a tutti i giochi.
-3. Giro del mondo e Free ride.
-4. Giochi nuovi scelti dall'utente (proposta: Pesca e Apnea per primi).
-5. Fase 6 (classifica per gioco/modalità) e fase 7 (rifinitura).
+- Fatto: tutte le modalità tranne il Duello (scartato), i 12 giochi, l'album condiviso, la home a carosello.
+- Differenze dalle proposte: Pesca senza opzione "rilascia" (ogni cattura va nell'album); Acquario come vasca, con un visitatore al giorno; Gabbiano con aquiloni guidati da BOB/BOBBA; specie notturne legate all'ora reale del dispositivo.
+- Prossimi passi possibili: fase 3 (ambiente, meteo) che arricchisce tutti i giochi, poi fase 6 (classifica per gioco e modalità) e fase 7 (rifinitura, IT e PT).

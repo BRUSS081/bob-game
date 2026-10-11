@@ -1,7 +1,13 @@
 /** Keys that act as the game's single button. */
 const GAME_KEYS = new Set(['Space', 'ArrowUp']);
 /** Keys used by menus; all of them are kept from scrolling the page. */
-const MENU_KEYS = new Set(['ArrowLeft', 'ArrowRight', 'ArrowDown', 'Enter', 'Escape', 'Tab', 'KeyR', 'KeyA', 'KeyD', 'Digit1', 'Digit2', 'Digit3']);
+const MENU_KEYS = new Set(['ArrowLeft', 'ArrowRight', 'ArrowDown', 'Enter', 'Escape', 'Tab', 'Backspace', 'Minus']);
+// letters and digits: shortcuts in menus, and typing the leaderboard nickname
+for (let c = 65; c <= 90; c++) MENU_KEYS.add('Key' + String.fromCharCode(c));
+for (let d = 0; d <= 9; d++) {
+  MENU_KEYS.add('Digit' + d);
+  MENU_KEYS.add('Numpad' + d);
+}
 /** Keys that steer in the games seen from above. */
 const LEFT_KEYS = new Set(['ArrowLeft', 'KeyA']);
 const RIGHT_KEYS = new Set(['ArrowRight', 'KeyD']);
@@ -94,6 +100,8 @@ export class Input {
   }
 
   private readonly onKeyDown = (e: KeyboardEvent): void => {
+    // leave the browser's shortcuts alone (Ctrl+R, Cmd+L, ...)
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
     const game = GAME_KEYS.has(e.code);
     if (!game && !MENU_KEYS.has(e.code)) return;
     e.preventDefault();

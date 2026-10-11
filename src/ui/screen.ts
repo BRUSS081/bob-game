@@ -7,11 +7,12 @@ import type { MissionLog } from '../custom/missions.ts';
 import type { Profile } from '../custom/profile.ts';
 import type { Athlete } from '../game/athletes.ts';
 import type { SportId } from '../game/sport.ts';
+import type { Ranks } from '../net/ranks.ts';
 import type { Renderer } from '../render/renderer.ts';
 import type { ActorKind } from '../sprites/actor.ts';
 import type { AthleteSprites } from '../sprites/sheet.ts';
 
-export type ScreenId = 'home' | 'customize' | 'game' | 'missions' | 'album' | 'setup' | 'tour' | 'settings' | MiniGameId;
+export type ScreenId = 'home' | 'customize' | 'game' | 'missions' | 'album' | 'setup' | 'tour' | 'settings' | 'ranks' | MiniGameId;
 
 /** What every screen can reach: drawing, saved choices and navigation. */
 export interface Context {
@@ -20,6 +21,8 @@ export interface Context {
   readonly profile: Profile;
   readonly missions: MissionLog;
   readonly album: Album;
+  /** The global leaderboard. */
+  readonly ranks: Ranks;
   /** Sprites of the current look for the current sport (cached, rebuilt only on change). */
   player(): AthleteSprites;
   /** Sprites for any look (LRU cached). */

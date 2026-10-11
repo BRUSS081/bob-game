@@ -73,6 +73,8 @@ export class PlayScreen implements Screen {
   private bannerTime = 0;
   private readonly tutorial = new Tutorial();
   private hitStop = 0;
+  /** This run goes to the global leaderboard. */
+  private ranked = false;
   private shake = 0;
   /** Splashes, spray and the wake. */
   private readonly fx = new Particles(160);
@@ -305,6 +307,11 @@ export class PlayScreen implements Screen {
       if (this.mode !== 'freeride') this.checkMissions();
     }
     if (this.lastPhase === 'running' && g.phase === 'over') this.runEnded();
+    if ((this.lastPhase === 'ready' || this.lastPhase === 'over') && g.phase === 'running') {
+      // an endless run counts for the global leaderboard (the shielded tutorial does not)
+      this.ranked = this.mode === 'endless' && !g.shield;
+      if (this.ranked) this.ctx.ranks.runStarted(g.sport);
+    }
     this.lastPhase = g.phase;
     if (this.bannerTime > 0) this.bannerTime -= dt;
   }
@@ -355,6 +362,10 @@ export class PlayScreen implements Screen {
     const g = this.game;
     const p = this.ctx.profile;
     if (this.mode === 'endless' && g.points > p.best[g.sport]) p.setBest(g.sport, g.points);
+    if (this.ranked) {
+      this.ranked = false;
+      void this.ctx.ranks.runEnded(g.sport, g.points, g.time);
+    }
     const key = this.bestKey;
     if (key && g.points > p.gameBest(`run.${key}`)) p.setGameBest(`run.${key}`, g.points);
     if (this.mode === 'tour') {
@@ -589,9 +600,10 @@ export class PlayScreen implements Screen {
         const newBest = this.daily ? this.newDailyBest : this.mode === 'tour' || this.mode === 'freeride' ? false : g.newBest;
         const tour = this.mode === 'tour';
         const missions = this.runMissions.length > 0;
+        const ranked = this.mode === 'endless' && this.ctx.ranks.status !== 'none';
         // a smaller title when the screen is short
         // everything but the title, then the title at 2u, or at u when the screen is short
-        const rest = textH + u + (GLYPH_H + 4) * 2 * u + (newBest ? textH : 0) + (this.daily ? textH : 0) + (tour ? 16 * u : 0) + (missions ? textH + 2 * u : 0) + 2 * u + (GLYPH_H + 7) * u;
+        const rest = textH + u + (GLYPH_H + 4) * 2 * u + (newBest ? textH : 0) + (this.daily ? textH : 0) + (tour ? 16 * u : 0) + (missions ? textH + 2 * u : 0) + (ranked ? textH : 0) + 2 * u + (GLYPH_H + 7) * u;
         const title = (GLYPH_H + 3) * 2 * u + rest > r.H - row2 - lineH - margin ? u : 2 * u;
         const blockH = (GLYPH_H + 3) * title + rest;
         let oy = Math.max(row2 + lineH, Math.min(mid - 36 * u, r.H - margin - blockH));
@@ -617,6 +629,10 @@ export class PlayScreen implements Screen {
           r.number(this.dailyRecord.best, digits, lx + lw - digits * adv, oy, C.skyPale, u);
           oy += textH;
         }
+        if (ranked) {
+          this.rankLine(oy);
+          oy += textH;
+        }
         if (missions) {
           // "MISSION COMPLETE!" and the colors it unlocked
           const sw = 8 * u;
@@ -638,6 +654,53 @@ export class PlayScreen implements Screen {
       }
       case 'ready':
         break;
+    }
+  }
+
+  /** Under the score: the run on its way to the leaderboard, or where it landed. */
+  private rankLine(y: number): void {
+    const { r } = this.ctx;
+    const { W, u } = r;
+    const ranks = this.ctx.ranks;
+    const words = t.ranks;
+    switch (ranks.status) {
+      case 'sending':
+        r.centered(words.sending, W / 2, y, C.skyPale, u);
+        return;
+      case 'offline':
+        r.centered(words.offlineRun, W / 2, y, C.skyPale, u);
+        return;
+      case 'rejected':
+        r.centered(words.notSent, W / 2, y, C.coral, u);
+        return;
+      case 'nickname':
+        r.centered(words.needNick, W / 2, y, C.sun, u);
+        return;
+      case 'sent': {
+        // "WORLD #12  THIS WEEK #3"
+        const adv = ADVANCE * u;
+        const all = ranks.all;
+        const week = ranks.week;
+        const a = all ? digitCount(all.rank) : 0;
+        const b = week ? digitCount(week.rank) : 0;
+        const w1 = all ? r.font.width(words.world, u) + (a + 2) * adv : 0;
+        const w2 = week ? r.font.width(words.week, u) + (b + 2) * adv : 0;
+        let x = Math.round((W - w1 - w2 - (all && week ? 2 * adv : 0)) / 2);
+        if (all) {
+          r.text(words.world, x, y, C.gold, u);
+          x += r.font.width(words.world, u) + adv;
+          r.text('#', x, y, C.gold, u);
+          r.number(all.rank, a, x + adv, y, C.gold, u);
+          x += (a + 1) * adv + 2 * adv;
+        }
+        if (week) {
+          r.text(words.week, x, y, C.skyPale, u);
+          x += r.font.width(words.week, u) + adv;
+          r.text('#', x, y, C.skyPale, u);
+          r.number(week.rank, b, x + adv, y, C.skyPale, u);
+        }
+        return;
+      }
     }
   }
 

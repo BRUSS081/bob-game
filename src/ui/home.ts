@@ -13,10 +13,11 @@ const PLAY = 1;
 const BOTTOM = 2;
 const RIDER = 3;
 const ROWS = 4;
-const BOTTOM_ITEMS: readonly { icon: IconName; label: 'look' | 'missions' | 'album' }[] = [
+const BOTTOM_ITEMS: readonly { icon: IconName; label: 'look' | 'missions' | 'album' | 'leaderboard' }[] = [
   { icon: 'look', label: 'look' },
   { icon: 'missions', label: 'missions' },
   { icon: 'album', label: 'album' },
+  { icon: 'ranks', label: 'leaderboard' },
 ];
 
 /**
@@ -92,7 +93,7 @@ export class HomeScreen implements Screen {
   }
 
   private openBottom(i: number): void {
-    this.ctx.go(i === 0 ? 'customize' : i === 1 ? 'missions' : 'album');
+    this.ctx.go(i === 0 ? 'customize' : i === 1 ? 'missions' : i === 2 ? 'album' : 'ranks');
   }
 
   key(code: string): void {

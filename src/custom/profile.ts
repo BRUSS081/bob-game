@@ -5,6 +5,8 @@ import { isGameId, type GameId } from '../games/registry.ts';
 import type { SkyChoice, WeatherChoice } from '../env/environment.ts';
 import { SKY_NAMES } from '../env/sky.ts';
 import { WEATHER_NAMES } from '../env/weather.ts';
+import { cleanNickname, isSecret, nicknameProblem } from '../../supabase/functions/_shared/rules.ts';
+import { newSecret } from '../net/leaderboard.ts';
 import { BODY_KEYS, CHARACTERS, defaultConfig, sanitize, type AthleteConfig, type CharacterId, type Unlocked } from './athlete.ts';
 
 type PerSport<T> = Record<SportId, T>;
@@ -38,6 +40,9 @@ export class Profile {
   /** Time of day and weather forced in the settings, or 'auto'. */
   sky: SkyChoice = 'auto';
   weather: WeatherChoice = 'auto';
+  /** Leaderboard nickname, empty until the player picks one. */
+  nickname = '';
+  private secret = '';
 
   constructor(unlocked: Unlocked = new Set()) {
     const sport = load<unknown>('bob.sport', 'surf');
@@ -72,6 +77,10 @@ export class Profile {
       if ((SKY_NAMES as readonly unknown[]).includes(s.sky)) this.sky = s.sky as SkyChoice;
       if ((WEATHER_NAMES as readonly unknown[]).includes(s.weather)) this.weather = s.weather as WeatherChoice;
     }
+    const nick = load<unknown>('bob.nick', '');
+    if (typeof nick === 'string' && nicknameProblem(nick) === null) this.nickname = nick;
+    const secret = load<unknown>('bob.player', '');
+    if (isSecret(secret)) this.secret = secret;
     const done = load<unknown>('bob.tutorial', []);
     if (Array.isArray(done)) for (const s of done) if (isSport(s)) this.tutorialDone.add(s);
     // the body is shared: older saves may differ per sport, the current sport wins
@@ -172,6 +181,28 @@ export class Profile {
   setGameBest(key: string, value: number): void {
     this.bests.set(key, value);
     save(`bob.best.${key}`, value);
+  }
+
+  /** Saves a nickname; false (and nothing saved) when it is not allowed. */
+  setNickname(raw: string): boolean {
+    const nick = cleanNickname(raw);
+    if (nicknameProblem(nick) !== null) return false;
+    this.nickname = nick;
+    save('bob.nick', nick);
+    return true;
+  }
+
+  /**
+   * The random secret that makes this device's runs one player on the
+   * leaderboard; made on first use. It identifies nobody: no account, no
+   * personal data, and the board only shows its hash.
+   */
+  playerSecret(): string {
+    if (!this.secret) {
+      this.secret = newSecret();
+      save('bob.player', this.secret);
+    }
+    return this.secret;
   }
 
   setSettings(sky: SkyChoice, weather: WeatherChoice): void {

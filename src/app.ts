@@ -18,6 +18,8 @@ import { HomeScreen } from './ui/home.ts';
 import { MissionsScreen } from './ui/missions.ts';
 import { SetupScreen } from './ui/setup.ts';
 import { SettingsScreen } from './ui/settings.ts';
+import { RanksScreen } from './ui/ranks.ts';
+import { Ranks } from './net/ranks.ts';
 import { TourScreen } from './ui/tour.ts';
 import { AlbumScreen } from './ui/album.ts';
 import { PlayScreen } from './ui/play.ts';
@@ -34,6 +36,7 @@ export class App implements Context {
   readonly missions = new MissionLog();
   readonly album = new Album();
   readonly profile = new Profile(this.missions.unlocked);
+  readonly ranks = new Ranks(this.profile);
   private readonly display: Display;
   private readonly cache = new SpriteCache(12);
   private readonly actors = new ActorCache(10);
@@ -60,6 +63,7 @@ export class App implements Context {
       setup: new SetupScreen(this),
       tour: new TourScreen(this),
       settings: new SettingsScreen(this),
+      ranks: new RanksScreen(this),
     };
     this.r.env.apply(this.profile.sky, this.profile.weather);
     registerGames(this, (id, screen) => this.addScreen(id, screen));

@@ -3,7 +3,7 @@ import { C } from '../render/palette.ts';
 import { Raster } from './raster.ts';
 
 /** Icons of the home carousel and the menu buttons, 16×16, drawn in code. */
-export type IconName = GameId | 'look' | 'missions' | 'album' | 'sky';
+export type IconName = GameId | 'look' | 'missions' | 'album' | 'sky' | 'ranks';
 export const ICON = 16;
 
 function ink(r: Raster): Raster {
@@ -137,6 +137,18 @@ const DRAW: Record<IconName, (r: Raster) => void> = {
     r.rect(4, 2, 1, 13, C.indigo);
     r.rect(7, 5, 5, 4, C.white);
     fish(r, 8, 5, C.sky, C.blue);
+  },
+  ranks(r) {
+    // a trophy
+    r.rect(4, 2, 8, 6, C.gold);
+    r.ellipse(8, 7, 4, 3, C.gold);
+    r.rect(1, 3, 3, 1, C.gold);
+    r.rect(1, 3, 1, 3, C.gold);
+    r.rect(12, 3, 3, 1, C.gold);
+    r.rect(14, 3, 1, 3, C.gold);
+    r.rect(5, 2, 1, 5, C.sun);
+    r.rect(7, 10, 2, 3, C.orange);
+    r.rect(5, 13, 6, 2, C.brown);
   },
   sky(r) {
     // sun half behind a cloud, a few raindrops: time of day and weather

@@ -23,5 +23,11 @@ const loop = new Loop(
 );
 loop.start();
 
+// installable and playable offline: the service worker exists only in the built site
+// (it does not on a page served from elsewhere, and then nothing happens)
+if (import.meta.env.PROD && 'serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+  navigator.serviceWorker.register('./sw.js').catch(() => undefined);
+}
+
 // development only: inspect and drive the game from the console
 if (import.meta.env.DEV) Object.assign(window, { app });

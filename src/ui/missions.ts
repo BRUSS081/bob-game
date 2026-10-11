@@ -57,14 +57,18 @@ export class MissionsScreen implements Screen {
     let cell = 0;
     let h = 0;
     let buttonH = 0;
+    // the longest mission text in this language sets the width
+    let longest = 0;
+    for (let i = 0; i < MISSIONS.length; i++) longest = Math.max(longest, t.missionText[MISSIONS[i].id].length);
     for (;;) {
       lineH = (GLYPH_H + 5) * u;
-      w = Math.min(W - 2 * margin, r.font.widthOf(23, u) + 26 * u);
+      const wanted = r.font.widthOf(longest, u) + 26 * u;
+      w = Math.min(W - 2 * margin, wanted);
       // three missions, the collection (two rows of six swatches), the title and the button
       cell = Math.min(Math.floor((w - 8 * u) / 6), 18 * u);
       h = lineH * 2 + 3 * (lineH + 2 * u) + 2 * cell + 10 * u;
       buttonH = (GLYPH_H + 7) * u;
-      if (u === 1 || h + buttonH + 4 * u + 2 * margin <= H) break;
+      if (u === 1 || (h + buttonH + 4 * u + 2 * margin <= H && wanted <= W - 2 * margin)) break;
       u = 1;
     }
     const sw = 12 * u;

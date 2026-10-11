@@ -13,7 +13,7 @@ import { TOUR_SPOTS, starsFor } from '../game/tour.ts';
 import { Game, POPUP_TIME } from '../game/game.ts';
 import { nextMultiplier } from '../game/score.ts';
 import { SPORTS, type SportId } from '../game/sport.ts';
-import { t } from '../i18n/strings.ts';
+import { t, type Strings } from '../i18n/strings.ts';
 import { ADVANCE, GLYPH_H, digitCount } from '../render/font.ts';
 import { C } from '../render/palette.ts';
 import { Particles } from '../render/particles.ts';
@@ -325,9 +325,15 @@ export class PlayScreen implements Screen {
     const sea = r.seaY;
     const push = -g.effectiveSpeed * 0.5;
     if (a.state !== this.lastState) {
-      if (a.state === 'air' && this.lastState === 'ride') this.fx.splash(this.fxRng, x, sea - 1, 10, 1.6, push, SPRAY);
-      else if (a.state === 'ride' && this.lastState === 'air') this.fx.splash(this.fxRng, x, sea - 1, 8, 2.2, push, SPRAY);
-      else if (a.state === 'crash') this.fx.splash(this.fxRng, x, sea - 2, 22, 2.6, push, SPRAY);
+      if (a.state === 'air' && this.lastState === 'ride') {
+        this.fx.splash(this.fxRng, x, sea - 1, 10, 1.6, push, SPRAY);
+        // a light tick on phones when the board leaves the water, a longer one on a wipeout
+        this.ctx.vibrate(12);
+      } else if (a.state === 'ride' && this.lastState === 'air') this.fx.splash(this.fxRng, x, sea - 1, 8, 2.2, push, SPRAY);
+      else if (a.state === 'crash') {
+        this.fx.splash(this.fxRng, x, sea - 2, 22, 2.6, push, SPRAY);
+        this.ctx.vibrate(60);
+      }
       this.lastState = a.state;
     }
     this.wakeTime += dt;
@@ -610,8 +616,8 @@ export class PlayScreen implements Screen {
         const reason = g.endReason;
         const heading = reason === 'time' ? t.timeUp : reason === 'finish' ? t.tourFinish : reason === 'wave' ? t.waveCaught : t.wipeout;
         oy += r.centered(heading, W / 2, oy, C.white, title);
-        const who = tour ? TOUR_SPOTS[this.spot].name : WHO[this.ctx.profile.rider][g.sport];
-        oy += r.centered(who, W / 2, oy, C.skyPale, u) + u;
+        const whoText = tour ? TOUR_SPOTS[this.spot].name : who(this.ctx.profile.rider, g.sport);
+        oy += r.centered(whoText, W / 2, oy, C.skyPale, u) + u;
         const scoreDigits = digitCount(points);
         r.number(points, scoreDigits, Math.floor((W - r.font.widthOf(scoreDigits, 2 * u)) / 2), oy, C.sun, 2 * u);
         oy += (GLYPH_H + 4) * 2 * u;
@@ -795,19 +801,38 @@ export class PlayScreen implements Screen {
     const { r } = this.ctx;
     const u = r.u;
     const h = (GLYPH_H + 7) * u;
-    const w = Math.max(r.font.width(primary, u), r.font.width(t.back, u), r.font.width(t.share, u)) + 12 * u;
-    const gap = 4 * u;
-    const total = (share ? 3 : 2) * w + (share ? 2 : 1) * gap;
-    const x = Math.round((r.W - total) / 2);
+    const text = Math.max(r.font.width(primary, u), r.font.width(t.back, u), share ? r.font.width(t.share, u) : 0);
+    const room = r.W - 12;
+    const n = share ? 3 : 2;
+    // roomy buttons, tighter ones, or SHARE on a row of its own (long words, narrow phones)
+    let w = text + 12 * u;
+    let gap = 4 * u;
+    if (n * w + (n - 1) * gap > room) {
+      w = text + 6 * u;
+      gap = 2 * u;
+    }
+    const oneRow = n * w + (n - 1) * gap <= room;
+    const first = oneRow ? n : 2;
+    const x = Math.round((r.W - (first * w + (first - 1) * gap)) / 2);
     r.button(setRect(this.leftRect, x, y, w, h), primary, 'primary', u);
     r.button(setRect(this.rightRect, x + w + gap, y, w, h), t.back, 'normal', u);
-    if (share) r.button(setRect(this.shareRect, x + 2 * (w + gap), y, w, h), t.share, 'normal', u);
+    if (share) {
+      if (oneRow) r.button(setRect(this.shareRect, x + 2 * (w + gap), y, w, h), t.share, 'normal', u);
+      else r.button(setRect(this.shareRect, Math.round((r.W - w) / 2), y + h + gap, w, h), t.share, 'normal', u);
+    }
   }
 }
 
-/** "BOBBA - KITESURF" for every rider and sport, built once. */
+/** "BOBBA - KITESURF" for every rider and sport, built once per language. */
 const WHO = {} as Record<CharacterId, Record<SportId, string>>;
-for (const ch of CHARACTERS) {
-  WHO[ch] = {} as Record<SportId, string>;
-  for (const sport of SPORTS) WHO[ch][sport] = `${t.characters[ch]} - ${t.sports[sport]}`;
+let whoLang: Strings | null = null;
+function who(ch: CharacterId, sport: SportId): string {
+  if (whoLang !== t) {
+    whoLang = t;
+    for (const c of CHARACTERS) {
+      WHO[c] = {} as Record<SportId, string>;
+      for (const s of SPORTS) WHO[c][s] = `${t.characters[c]} - ${t.sports[s]}`;
+    }
+  }
+  return WHO[ch][sport];
 }

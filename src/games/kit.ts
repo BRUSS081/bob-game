@@ -57,7 +57,8 @@ export abstract class MiniGame implements Screen {
   protected best = 0;
   protected newBest = false;
   protected overTime = 0;
-  protected overTitle: string = t.gameOver;
+  /** Heading of the end card; empty means the plain "game over". */
+  protected overTitle = '';
   /** Extra lines on the end screen. */
   protected readonly overLines: OverLine[] = [];
   protected readonly ctx: Context;
@@ -297,7 +298,7 @@ export abstract class MiniGame implements Screen {
     const u = r.u;
     const lineH = (GLYPH_H + 3) * u;
     let y = Math.max(6 + (GLYPH_H + 4) * u * 2, Math.round(r.H * 0.2));
-    y += r.centered(this.overTitle, r.W / 2, y, C.white, 2 * u);
+    y += r.centered(this.overTitle || t.gameOver, r.W / 2, y, C.white, 2 * u);
     const big = 2 * u;
     const valueW = this.timed ? (Math.max(2, digitCount(Math.floor(this.score))) + 3) * ADVANCE * big : digitCount(Math.floor(this.score)) * ADVANCE * big;
     this.drawValue(this.score, Math.round((r.W + valueW) / 2), y, C.sun, big);

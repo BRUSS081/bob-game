@@ -24,7 +24,10 @@ const FITS: readonly (readonly [number, number, number])[] = [
   [1, 5, 2],
 ];
 
-const STYLE_NAMES = t.styles as unknown as Record<string, Record<string, string>>;
+/** Names of the style options in the current language. */
+function styleName(key: string, name: string): string {
+  return (t.styles as unknown as Record<string, Record<string, string>>)[key][name];
+}
 
 function rampsFor(spec: OptionSpec): readonly Ramp[] {
   switch (spec.kind) {
@@ -345,7 +348,7 @@ export class CustomizeScreen implements Screen {
     if (spec.kind === 'character') {
       r.centered(t.characters[CHARACTERS[v]], cx, textY, C.sun, u);
     } else if (spec.kind === 'style' && spec.names) {
-      r.centered(STYLE_NAMES[spec.key][spec.names[v]], cx, textY, C.white, u);
+      r.centered(styleName(spec.key, spec.names[v]), cx, textY, C.white, u);
     } else if (v < 0) {
       r.centered(t.none, cx, textY, C.grey, u);
     } else {

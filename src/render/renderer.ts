@@ -760,7 +760,7 @@ export class Renderer {
       const bestDigits = Math.max(5, digitCount(best));
       const bestX = (showPoints ? scoreX - 2 * adv : this.W - margin + u) - bestDigits * adv;
       this.number(best, bestDigits, bestX, margin, C.skyPale, u);
-      this.font.drawShadowed(this.ctx, t.hi, bestX - 3 * adv, margin, C.skyPale, C.navy, u);
+      this.font.drawShadowed(this.ctx, t.hi, bestX - (t.hi.length + 1) * adv, margin, C.skyPale, C.navy, u);
     }
   }
 }

@@ -51,7 +51,39 @@ const GLYPHS: Record<string, readonly string[]> = {
   '/': ['....#', '....#', '...#.', '..#..', '.#...', '#....', '#....'],
   "'": ['..#..', '..#..', '.#...', '.....', '.....', '.....', '.....'],
   x: ['.....', '.....', '#...#', '.#.#.', '..#..', '.#.#.', '#...#'],
+  '°': ['.##..', '#..#.', '.##..', '.....', '.....', '.....', '.....'],
 };
+
+/**
+ * Accented capitals for Italian and Portuguese: the letter loses its second
+ * row to make room for the accent on top; Ç keeps its cedilla below.
+ */
+const MARKS = { grave: '.#...', acute: '...#.', circumflex: '.#.#.', tilde: '##.##' } as const;
+const ACCENTED: Record<string, [string, keyof typeof MARKS]> = {
+  À: ['A', 'grave'],
+  Á: ['A', 'acute'],
+  Â: ['A', 'circumflex'],
+  Ã: ['A', 'tilde'],
+  È: ['E', 'grave'],
+  É: ['E', 'acute'],
+  Ê: ['E', 'circumflex'],
+  Ì: ['I', 'grave'],
+  Í: ['I', 'acute'],
+  Ò: ['O', 'grave'],
+  Ó: ['O', 'acute'],
+  Ô: ['O', 'circumflex'],
+  Õ: ['O', 'tilde'],
+  Ù: ['U', 'grave'],
+  Ú: ['U', 'acute'],
+};
+for (const [ch, [base, mark]] of Object.entries(ACCENTED)) {
+  const b = GLYPHS[base];
+  GLYPHS[ch] = [MARKS[mark], b[0], ...b.slice(2)];
+}
+{
+  const c = GLYPHS.C;
+  GLYPHS['Ç'] = [c[0], ...c.slice(2), '..#..'];
+}
 
 export const GLYPH_W = 5;
 export const GLYPH_H = 7;
@@ -60,13 +92,19 @@ export const ADVANCE = 6;
 
 const ORDER = Object.keys(GLYPHS);
 
+/** True when the font has a glyph for this character (lowercase letters draw as capitals). */
+export function canDraw(ch: string): boolean {
+  return ch in GLYPHS || ch.toUpperCase() in GLYPHS;
+}
+
 /**
  * Bitmap font with one pre-rendered atlas per color, so drawing text is a
  * few drawImage calls with integer coordinates and no allocations.
  */
 export class BitmapFont {
   private readonly atlases: (HTMLCanvasElement | undefined)[] = [];
-  private readonly index = new Int16Array(128).fill(-1);
+  /** Glyph per character code, Latin-1 (accented letters included). */
+  private readonly index = new Int16Array(256).fill(-1);
 
   constructor() {
     ORDER.forEach((ch, i) => {
@@ -74,6 +112,7 @@ export class BitmapFont {
     });
     // lowercase falls back to uppercase, except the "x" used for multipliers
     for (let c = 97; c <= 122; c++) if (this.index[c] < 0) this.index[c] = this.index[c - 32];
+    for (let c = 224; c <= 254; c++) if (this.index[c] < 0 && c !== 247) this.index[c] = this.index[c - 32];
   }
 
   /** Width in pixels of `length` characters. */
@@ -90,7 +129,7 @@ export class BitmapFont {
     const atlas = this.atlas(color);
     for (let i = start; i < end; i++) {
       const code = text.charCodeAt(i);
-      const g = code < 128 ? this.index[code] : -1;
+      const g = code < 256 ? this.index[code] : -1;
       if (g < 0) continue;
       ctx.drawImage(atlas, g * GLYPH_W, 0, GLYPH_W, GLYPH_H, x + (i - start) * ADVANCE * scale, y, GLYPH_W * scale, GLYPH_H * scale);
     }

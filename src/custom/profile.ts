@@ -7,6 +7,7 @@ import { SKY_NAMES } from '../env/sky.ts';
 import { WEATHER_NAMES } from '../env/weather.ts';
 import { cleanNickname, isSecret, nicknameProblem } from '../../supabase/functions/_shared/rules.ts';
 import { newSecret } from '../net/leaderboard.ts';
+import { isLang, type Lang } from '../i18n/strings.ts';
 import { BODY_KEYS, CHARACTERS, defaultConfig, sanitize, type AthleteConfig, type CharacterId, type Unlocked } from './athlete.ts';
 
 type PerSport<T> = Record<SportId, T>;
@@ -40,6 +41,10 @@ export class Profile {
   /** Time of day and weather forced in the settings, or 'auto'. */
   sky: SkyChoice = 'auto';
   weather: WeatherChoice = 'auto';
+  /** Short buzzes on take-off and wipeouts (phones that can). */
+  vibration = true;
+  /** Language picked in the settings, or 'auto' for the device's. */
+  lang: Lang | 'auto' = 'auto';
   /** Leaderboard nickname, empty until the player picks one. */
   nickname = '';
   private secret = '';
@@ -76,6 +81,8 @@ export class Profile {
       const s = settings as Record<string, unknown>;
       if ((SKY_NAMES as readonly unknown[]).includes(s.sky)) this.sky = s.sky as SkyChoice;
       if ((WEATHER_NAMES as readonly unknown[]).includes(s.weather)) this.weather = s.weather as WeatherChoice;
+      if (isLang(s.lang)) this.lang = s.lang;
+      if (s.vibration === false) this.vibration = false;
     }
     const nick = load<unknown>('bob.nick', '');
     if (typeof nick === 'string' && nicknameProblem(nick) === null) this.nickname = nick;
@@ -205,10 +212,16 @@ export class Profile {
     return this.secret;
   }
 
-  setSettings(sky: SkyChoice, weather: WeatherChoice): void {
+  setSettings(sky: SkyChoice, weather: WeatherChoice, lang: Lang | 'auto' = this.lang): void {
     this.sky = sky;
     this.weather = weather;
-    save('bob.settings', { sky, weather });
+    this.lang = lang;
+    save('bob.settings', { sky, weather, lang, vibration: this.vibration });
+  }
+
+  setVibration(on: boolean): void {
+    this.vibration = on;
+    this.setSettings(this.sky, this.weather, this.lang);
   }
 
   setBest(sport: SportId, best: number): void {

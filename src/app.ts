@@ -20,6 +20,7 @@ import { SetupScreen } from './ui/setup.ts';
 import { SettingsScreen } from './ui/settings.ts';
 import { RanksScreen } from './ui/ranks.ts';
 import { Ranks } from './net/ranks.ts';
+import { deviceLang, setLang } from './i18n/strings.ts';
 import { TourScreen } from './ui/tour.ts';
 import { AlbumScreen } from './ui/album.ts';
 import { PlayScreen } from './ui/play.ts';
@@ -66,6 +67,7 @@ export class App implements Context {
       ranks: new RanksScreen(this),
     };
     this.r.env.apply(this.profile.sky, this.profile.weather);
+    setLang(this.profile.lang === 'auto' ? deviceLang() : this.profile.lang);
     registerGames(this, (id, screen) => this.addScreen(id, screen));
     this.screen = this.screens.home as Screen;
     this.screen.enter();
@@ -86,6 +88,15 @@ export class App implements Context {
   }
 
   /** The player's sprites in the light of the scene being drawn. */
+  vibrate(ms: number): void {
+    if (!this.profile.vibration || typeof navigator === 'undefined' || typeof navigator.vibrate !== 'function') return;
+    try {
+      navigator.vibrate(ms);
+    } catch {
+      // some browsers refuse it without a recent tap: no matter
+    }
+  }
+
   player(): AthleteSprites {
     if (!this.playerSprites || this.playerLight !== this.r.light) {
       this.playerSprites = this.cache.get(this.profile.look(), this.profile.sport, true, this.r.light);

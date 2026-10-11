@@ -231,7 +231,9 @@ export class HomeScreen implements Screen {
     y += rowH + 2 * gap;
 
     // small buttons: icon and short label
-    const bw = Math.max(r.font.width(t.missions, u) + ICON * u + 8 * u, 0);
+    let longest = 0;
+    for (let i = 0; i < BOTTOM_ITEMS.length; i++) longest = Math.max(longest, r.font.width(t[BOTTOM_ITEMS[i].label], u));
+    const bw = longest + ICON * u + 8 * u;
     const totalW = BOTTOM_ITEMS.length * bw + (BOTTOM_ITEMS.length - 1) * gap;
     const scale = totalW > W - 2 * margin ? 0 : 1;
     const itemW = scale ? bw : Math.floor((W - 2 * margin - (BOTTOM_ITEMS.length - 1) * gap) / BOTTOM_ITEMS.length);
@@ -276,6 +278,6 @@ export class HomeScreen implements Screen {
       x = right - digits * adv + u;
       r.number(best, digits, x, margin, C.skyPale, u);
     }
-    r.text(t.hi, x - 3 * adv, margin, C.skyPale, u);
+    r.text(t.hi, x - (t.hi.length + 1) * adv, margin, C.skyPale, u);
   }
 }

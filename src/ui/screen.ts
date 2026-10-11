@@ -36,6 +36,8 @@ export interface Context {
   go(screen: ScreenId): void;
   /** Starts a runner game in a mode (the tour starts at `spot`). */
   playRunner(mode: RunMode, spot?: number): void;
+  /** A short buzz on phones that can, unless turned off in the settings. */
+  vibrate(ms: number): void;
   /** Where the pointer is now, in game pixels (for steering by touch). */
   pointer(): { readonly x: number; readonly y: number };
 }

@@ -1,8 +1,16 @@
 import { load, save } from '../core/storage.ts';
 import { SPORTS, isSport, type SportId } from '../game/sport.ts';
-import { BODY_KEYS, CHARACTERS, defaultConfig, sanitize, type AthleteConfig, type CharacterId } from './athlete.ts';
+import { BODY_KEYS, CHARACTERS, defaultConfig, sanitize, type AthleteConfig, type CharacterId, type Unlocked } from './athlete.ts';
 
 type PerSport<T> = Record<SportId, T>;
+
+/** Today's daily challenge for one sport: best score and the ghost of that run. */
+export interface DailyRecord {
+  day: string;
+  best: number;
+  /** Encoded GhostTrack, empty when there is none. */
+  ghost: string;
+}
 
 /**
  * What the player picked: sport, BOB or BOBBA, a saved look for every
@@ -15,7 +23,7 @@ export class Profile {
   readonly looks: PerSport<Record<CharacterId, AthleteConfig>>;
   readonly best: PerSport<number>;
 
-  constructor() {
+  constructor(unlocked: Unlocked = new Set()) {
     const sport = load<unknown>('bob.sport', 'surf');
     this.sport = isSport(sport) ? sport : 'surf';
     this.rider = load<unknown>('bob.rider', 'bob') === 'bobba' ? 'bobba' : 'bob';
@@ -24,7 +32,7 @@ export class Profile {
     for (const s of SPORTS) {
       const looks = {} as Record<CharacterId, AthleteConfig>;
       for (const ch of CHARACTERS) {
-        const look = sanitize(load<unknown>(`bob.look.${s}.${ch}`, null), s);
+        const look = sanitize(load<unknown>(`bob.look.${s}.${ch}`, null), s, unlocked);
         // a look saved for one character never shows up on the other
         looks[ch] = look.character === ch ? look : defaultConfig(ch, s);
       }
@@ -65,6 +73,22 @@ export class Profile {
   saveLook(sport: SportId = this.sport): void {
     this.copyBody(sport, this.rider);
     for (const s of SPORTS) save(`bob.look.${s}.${this.rider}`, this.looks[s][this.rider]);
+  }
+
+  /** Today's record for a sport; a record from another day starts over. */
+  daily(sport: SportId, day: string): DailyRecord {
+    const raw = load<unknown>(`bob.daily.${sport}`, null);
+    if (typeof raw === 'object' && raw !== null) {
+      const r = raw as Record<string, unknown>;
+      if (r.day === day && typeof r.best === 'number' && Number.isFinite(r.best) && r.best > 0) {
+        return { day, best: Math.floor(r.best), ghost: typeof r.ghost === 'string' ? r.ghost : '' };
+      }
+    }
+    return { day, best: 0, ghost: '' };
+  }
+
+  saveDaily(sport: SportId, record: DailyRecord): void {
+    save(`bob.daily.${sport}`, record);
   }
 
   setBest(sport: SportId, best: number): void {

@@ -1,6 +1,7 @@
 import type { Display } from './core/display.ts';
 import type { Input } from './core/input.ts';
 import type { AthleteConfig } from './custom/athlete.ts';
+import { MissionLog } from './custom/missions.ts';
 import { Profile } from './custom/profile.ts';
 import { createAthlete, type Athlete } from './game/athletes.ts';
 import { surfaceY } from './game/config.ts';
@@ -9,6 +10,7 @@ import { Renderer } from './render/renderer.ts';
 import { SpriteCache, type AthleteSprites } from './sprites/sheet.ts';
 import { CustomizeScreen } from './ui/customize.ts';
 import { HomeScreen } from './ui/home.ts';
+import { MissionsScreen } from './ui/missions.ts';
 import { PlayScreen } from './ui/play.ts';
 import type { Context, Screen, ScreenId } from './ui/screen.ts';
 
@@ -20,13 +22,14 @@ import type { Context, Screen, ScreenId } from './ui/screen.ts';
 export class App implements Context {
   readonly r: Renderer;
   readonly input: Input;
-  readonly profile = new Profile();
+  readonly missions = new MissionLog();
+  readonly profile = new Profile(this.missions.unlocked);
   private readonly display: Display;
   private readonly cache = new SpriteCache(12);
   private readonly demos = {} as Record<SportId, Athlete>;
   private playerSprites: AthleteSprites | null = null;
   private readonly screens: Record<ScreenId, Screen>;
-  private readonly play: PlayScreen;
+  private readonly playScreen: PlayScreen;
   private screen: Screen;
   private screenId: ScreenId = 'home';
 
@@ -34,8 +37,8 @@ export class App implements Context {
     this.display = display;
     this.input = input;
     this.r = new Renderer(display);
-    this.play = new PlayScreen(this);
-    this.screens = { home: new HomeScreen(this), customize: new CustomizeScreen(this), game: this.play };
+    this.playScreen = new PlayScreen(this);
+    this.screens = { home: new HomeScreen(this), customize: new CustomizeScreen(this), game: this.playScreen, missions: new MissionsScreen(this) };
     this.screen = this.screens.home;
     this.screen.enter();
   }
@@ -46,7 +49,7 @@ export class App implements Context {
 
   /** The run in progress (development console). */
   get game() {
-    return this.play.current;
+    return this.playScreen.current;
   }
 
   player(): AthleteSprites {
@@ -76,6 +79,11 @@ export class App implements Context {
     this.screen = this.screens[id];
     this.changed();
     this.screen.enter();
+  }
+
+  play(daily: boolean): void {
+    this.playScreen.daily = daily;
+    this.go('game');
   }
 
   /** Window blurred or tab hidden. */

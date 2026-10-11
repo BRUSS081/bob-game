@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Rng } from '../src/core/rng.ts';
 import { OPTIONS, configKey, defaultConfig, randomize, resolveRamps, sanitize, stepOption } from '../src/custom/athlete.ts';
 import { SPORTS } from '../src/game/sport.ts';
+import { BASE_GEAR_COUNT } from '../src/sprites/ramps.ts';
 
 describe('athlete customization', () => {
   it('BOB and BOBBA have different signature looks, the same in every sport', () => {
@@ -21,6 +22,11 @@ describe('athlete customization', () => {
     const helmet = OPTIONS.find((o) => o.key === 'helmet')!;
     expect(c.helmet).toBe(-1);
     stepOption(c, helmet, -1);
+    // special colors are skipped until unlocked
+    expect(c.helmet).toBe(BASE_GEAR_COUNT - 1);
+    stepOption(c, helmet, -1, new Set([helmet.count - 1]));
+    stepOption(c, helmet, 1, new Set([helmet.count - 1]));
+    stepOption(c, helmet, 1, new Set([helmet.count - 1]));
     expect(c.helmet).toBe(helmet.count - 1);
     stepOption(c, helmet, 1);
     expect(c.helmet).toBe(-1);

@@ -100,6 +100,7 @@ export class Renderer {
   private readonly powers: Record<'wave' | 'gust', HTMLCanvasElement | null> = { wave: null, gust: null };
   private readonly swatches = new Map<Ramp, [string, string, string]>();
   private dolphinCanvases: HTMLCanvasElement[] | null = null;
+  private readonly ghosts = new WeakMap<AthleteSprites, AthleteSprites>();
 
   constructor(display: Display) {
     this.display = display;
@@ -326,6 +327,50 @@ export class Renderer {
     }
     if (scale === 1) this.ctx.drawImage(frame, dx, dy);
     else this.ctx.drawImage(frame, dx, dy, FRAME_W * scale, FRAME_H * scale);
+  }
+
+  /** A white silhouette of a sprite set, built once per set. */
+  private ghostSet(set: AthleteSprites): AthleteSprites {
+    let g = this.ghosts.get(set);
+    if (!g) {
+      const white = (src: HTMLCanvasElement): HTMLCanvasElement => {
+        const c = document.createElement('canvas');
+        c.width = src.width;
+        c.height = src.height;
+        const ctx = c.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(src, 0, 0);
+          ctx.globalCompositeOperation = 'source-in';
+          ctx.fillStyle = PALETTE_CSS[C.white];
+          ctx.fillRect(0, 0, c.width, c.height);
+        }
+        return c;
+      };
+      const frames = {} as Record<FrameName, HTMLCanvasElement>;
+      for (const k of Object.keys(set.frames) as FrameName[]) frames[k] = white(set.frames[k]);
+      g = { ...set, frames, spins: set.spins.map(white), kite: set.kite.map(white) };
+      this.ghosts.set(set, g);
+    }
+    return g;
+  }
+
+  /** The ghost of a recorded run: the athlete as a translucent white silhouette. */
+  ghostAthlete(set: AthleteSprites, sport: SportId, a: PoseView, x: number, clock: number, playerW: number): void {
+    this.ctx.globalAlpha = 0.45;
+    this.athlete(this.ghostSet(set), sport, a, x, 1, clock, 1, this.seaY, playerW);
+    this.ctx.globalAlpha = 1;
+  }
+
+  /** A small flag on the water where the best run ended. */
+  bestFlag(x: number, label: string): void {
+    x = Math.round(x);
+    const top = this.seaY - 30;
+    const w = this.font.width(label, 1) + 4;
+    this.fill(C.ink, x - 1, top - 1, 3, 31);
+    this.fill(C.white, x, top, 1, 30);
+    this.fill(C.ink, x + 1, top - 1, w + 2, 11);
+    this.fill(C.gold, x + 2, top, w, 9);
+    this.font.draw(this.ctx, label, x + 4, top + 1, C.navy, 1);
   }
 
   /** Kite canopy above the rider and its two lines down to the bar. */

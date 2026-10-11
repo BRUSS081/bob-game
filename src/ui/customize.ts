@@ -127,7 +127,7 @@ export class CustomizeScreen implements Screen {
     if (spec.key === 'character') {
       p.setRider(CHARACTERS[(CHARACTERS.indexOf(p.rider) + dir + CHARACTERS.length) % CHARACTERS.length]);
     } else {
-      stepOption(p.look(), spec, dir);
+      stepOption(p.look(), spec, dir, this.ctx.missions.unlocked);
       p.saveLook();
     }
     this.ctx.changed();
@@ -135,7 +135,7 @@ export class CustomizeScreen implements Screen {
 
   private shuffle(): void {
     const p = this.ctx.profile;
-    randomize(p.look(), p.sport, this.rng);
+    randomize(p.look(), p.sport, this.rng, this.ctx.missions.unlocked);
     p.saveLook();
     this.ctx.changed();
   }

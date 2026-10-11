@@ -10,8 +10,10 @@ import { DemoPilot, type Context, type Screen } from './screen.ts';
 const SPORT = 0;
 const RIDER = 1;
 const PLAY = 2;
-const CUSTOMIZE = 3;
-const ROWS = 4;
+/** DAILY and MISSIONS, side by side. */
+const EXTRA = 3;
+const CUSTOMIZE = 4;
+const ROWS = 5;
 
 /**
  * Title screen: pick the sport and BOB or BOBBA, then play or customize.
@@ -19,6 +21,8 @@ const ROWS = 4;
  */
 export class HomeScreen implements Screen {
   private focus = PLAY;
+  /** Column in the EXTRA row: 0 daily, 1 missions. */
+  private col = 0;
   private clock = 0;
   private distance = 0;
   private readonly pilot = new DemoPilot();
@@ -26,6 +30,8 @@ export class HomeScreen implements Screen {
   private readonly next = newRect();
   private readonly riders = [newRect(), newRect()];
   private readonly play = newRect();
+  private readonly daily = newRect();
+  private readonly missions = newRect();
   private readonly custom = newRect();
   private readonly ctx: Context;
 
@@ -59,8 +65,11 @@ export class HomeScreen implements Screen {
     const p = this.ctx.profile;
     if (this.focus === SPORT) this.changeSport(1);
     else if (this.focus === RIDER) this.changeRider(CHARACTERS.indexOf(p.rider) + 1);
-    else if (this.focus === PLAY) this.ctx.go('game');
-    else this.ctx.go('customize');
+    else if (this.focus === PLAY) this.ctx.play(false);
+    else if (this.focus === EXTRA) {
+      if (this.col === 0) this.ctx.play(true);
+      else this.ctx.go('missions');
+    } else this.ctx.go('customize');
   }
 
   key(code: string): void {
@@ -78,7 +87,7 @@ export class HomeScreen implements Screen {
         const step = code === 'ArrowLeft' ? -1 : 1;
         if (this.focus === SPORT) this.changeSport(step);
         else if (this.focus === RIDER) this.changeRider(CHARACTERS.indexOf(p.rider) + step);
-        else this.focus = this.focus === PLAY ? CUSTOMIZE : PLAY;
+        else if (this.focus === EXTRA) this.col = 1 - this.col;
         break;
       }
       case 'Space':
@@ -93,7 +102,9 @@ export class HomeScreen implements Screen {
     else if (inside(this.next, x, y)) this.changeSport(1);
     else if (inside(this.riders[0], x, y)) this.changeRider(0);
     else if (inside(this.riders[1], x, y)) this.changeRider(1);
-    else if (inside(this.play, x, y)) this.ctx.go('game');
+    else if (inside(this.play, x, y)) this.ctx.play(false);
+    else if (inside(this.daily, x, y)) this.ctx.play(true);
+    else if (inside(this.missions, x, y)) this.ctx.go('missions');
     else if (inside(this.custom, x, y)) this.ctx.go('customize');
     else return false;
     return true;
@@ -118,17 +129,18 @@ export class HomeScreen implements Screen {
     r.surfaceFront(this.distance);
     r.scoreLine(0, profile.best[sport], false);
 
-    // menu block: title, sport, rider, play, customize
+    // menu block: title, sport, rider, play, daily + missions, customize
     const rowH = (GLYPH_H + 7) * u;
-    const gap = 4 * u;
     const margin = 6;
     const top = margin + (GLYPH_H + 4) * u;
     let title = 4 * u;
-    let block = GLYPH_H * title + 3 * gap + ROWS * (rowH + gap);
-    if (block > seaY - top - 4) {
-      title = 3 * u;
-      block = GLYPH_H * title + 3 * gap + ROWS * (rowH + gap);
-    }
+    let gap = 4 * u;
+    const blockH = () => GLYPH_H * title + 3 * gap + ROWS * (rowH + gap);
+    // shrink the title, then the gaps, until the menu fits above the sea (or at least on screen)
+    if (blockH() > seaY - top - 4) title = 3 * u;
+    if (blockH() > H - top - margin) title = 2 * u;
+    if (blockH() > H - top - margin) gap = 2 * u;
+    const block = blockH();
     const cx = landscape ? Math.round(W * 0.64) : Math.round(W / 2);
     let y = Math.max(top, Math.min(Math.round((seaY - block) / 2), H - block - margin));
 
@@ -147,8 +159,8 @@ export class HomeScreen implements Screen {
     r.arrowButton(this.next, 1, u);
     y += rowH + gap;
 
-    // [BOB] [BOBBA]
-    const riderW = r.font.width(t.characters.bobba, u) + 10 * u;
+    // [BOB] [BOBBA], then the other rows on the same two-column grid
+    const riderW = Math.max(r.font.width(t.characters.bobba, u), r.font.width(t.missions, u), r.font.width(t.daily, u)) + 8 * u;
     const rider = profile.rider;
     for (let i = 0; i < CHARACTERS.length; i++) {
       const rect = setRect(this.riders[i], i === 0 ? cx - riderW - u : cx + u, y, riderW, rowH);
@@ -158,6 +170,9 @@ export class HomeScreen implements Screen {
 
     const wide = Math.max(r.font.width(t.customize, u) + 12 * u, 2 * riderW + 2 * u);
     r.button(setRect(this.play, cx - wide / 2, y, wide, rowH), t.play, 'primary', u, this.focus === PLAY);
+    y += rowH + gap;
+    r.button(setRect(this.daily, cx - riderW - u, y, riderW, rowH), t.daily, 'normal', u, this.focus === EXTRA && this.col === 0);
+    r.button(setRect(this.missions, cx + u, y, riderW, rowH), t.missions, 'normal', u, this.focus === EXTRA && this.col === 1);
     y += rowH + gap;
     r.button(setRect(this.custom, cx - wide / 2, y, wide, rowH), t.customize, 'normal', u, this.focus === CUSTOMIZE);
   }

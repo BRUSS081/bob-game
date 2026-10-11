@@ -1,6 +1,15 @@
 import type { Rng } from '../core/rng.ts';
 import type { SportId } from '../game/sport.ts';
-import { GEAR_COLORS, HAIR_COLORS, LENS_COLORS, SKIN_TONES, type SlotRamps } from '../sprites/ramps.ts';
+import { BASE_GEAR_COUNT, GEAR_COLORS, HAIR_COLORS, LENS_COLORS, SKIN_TONES, type SlotRamps } from '../sprites/ramps.ts';
+
+/** Special gear colors the player has unlocked (indices into GEAR_COLORS). */
+export type Unlocked = ReadonlySet<number>;
+const NONE_UNLOCKED: Unlocked = new Set();
+
+/** Can this option take this value? Special gear colors need to be unlocked. */
+export function available(spec: OptionSpec, v: number, unlocked: Unlocked = NONE_UNLOCKED): boolean {
+  return spec.kind !== 'gear' || v < BASE_GEAR_COUNT || unlocked.has(v);
+}
 
 export type CharacterId = 'bob' | 'bobba';
 export const CHARACTERS: readonly CharacterId[] = ['bob', 'bobba'];
@@ -127,38 +136,44 @@ export function optionValue(c: AthleteConfig, key: OptionKey): number {
   return key === 'character' ? CHARACTERS.indexOf(c.character) : c[key];
 }
 
-/** Steps an option forward or back, wrapping around (through "none" where allowed). */
-export function stepOption(c: AthleteConfig, spec: OptionSpec, step: number): void {
+/** Steps an option forward or back, wrapping around (through "none" where allowed), skipping locked colors. */
+export function stepOption(c: AthleteConfig, spec: OptionSpec, step: number, unlocked: Unlocked = NONE_UNLOCKED): void {
   const min = spec.none ? -1 : 0;
   const span = spec.count - min;
-  const next = ((optionValue(c, spec.key) - min + step) % span + span) % span + min;
+  let next = optionValue(c, spec.key);
+  for (let i = 0; i < span; i++) {
+    next = ((next - min + step) % span + span) % span + min;
+    if (available(spec, next, unlocked)) break;
+  }
   if (spec.key === 'character') c.character = CHARACTERS[next];
   else c[spec.key] = next;
 }
 
 /** Random look that keeps the character (BOB stays BOB) and only touches options this sport shows. */
-export function randomize(c: AthleteConfig, sport: SportId, rng: Rng): void {
+export function randomize(c: AthleteConfig, sport: SportId, rng: Rng, unlocked: Unlocked = NONE_UNLOCKED): void {
   for (const spec of OPTIONS) {
     if (spec.key === 'character' || !spec.sports.includes(sport)) continue;
     const min = spec.none ? -1 : 0;
     // "none" is less likely, so most random looks show some gear
     let v = min + Math.floor(rng.next() * (spec.count - min));
     if (spec.none && v === -1 && rng.next() < 0.5) v = Math.floor(rng.next() * spec.count);
+    // a locked color falls back to an open one
+    if (!available(spec, v, unlocked)) v = v % BASE_GEAR_COUNT;
     c[spec.key] = v;
   }
   // keep suit colors distinct so the two-tone suit reads
-  if (c.suitA === c.suitB) c.suitB = (c.suitB + 3) % GEAR_COLORS.length;
+  if (c.suitA === c.suitB) c.suitB = (c.suitB + 3) % BASE_GEAR_COUNT;
 }
 
 /** Turns anything read from storage into a valid config, falling back to the default look. */
-export function sanitize(raw: unknown, sport: SportId): AthleteConfig {
+export function sanitize(raw: unknown, sport: SportId, unlocked: Unlocked = NONE_UNLOCKED): AthleteConfig {
   const obj = typeof raw === 'object' && raw !== null ? (raw as Record<string, unknown>) : {};
   const character: CharacterId = obj.character === 'bobba' ? 'bobba' : 'bob';
   const out = defaultConfig(character, sport);
   for (const spec of OPTIONS) {
     if (spec.key === 'character') continue;
     const v = obj[spec.key];
-    if (typeof v === 'number' && Number.isInteger(v) && v >= (spec.none ? -1 : 0) && v < spec.count) out[spec.key] = v;
+    if (typeof v === 'number' && Number.isInteger(v) && v >= (spec.none ? -1 : 0) && v < spec.count && available(spec, v, unlocked)) out[spec.key] = v;
   }
   return out;
 }

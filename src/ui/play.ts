@@ -1,6 +1,12 @@
+import { STEP } from '../core/loop.ts';
 import { Rng } from '../core/rng.ts';
 import { isGameKey } from '../core/input.ts';
 import { CHARACTERS, defaultConfig, randomize, type CharacterId } from '../custom/athlete.ts';
+import type { Mission, RunResult } from '../custom/missions.ts';
+import type { DailyRecord } from '../custom/profile.ts';
+import type { AthleteState } from '../game/athletes.ts';
+import { dailySeed, dayKey } from '../game/daily.ts';
+import { GHOST_AIR, GHOST_CRASH, GHOST_RIDE, GhostTrack, newGhostSample } from '../game/ghost.ts';
 import { WING } from '../game/config.ts';
 import { Game, POPUP_TIME } from '../game/game.ts';
 import { nextMultiplier } from '../game/score.ts';
@@ -8,7 +14,8 @@ import { SPORTS, type SportId } from '../game/sport.ts';
 import { t } from '../i18n/strings.ts';
 import { ADVANCE, GLYPH_H, digitCount } from '../render/font.ts';
 import { C } from '../render/palette.ts';
-import { HORIZON_ABOVE_SEA, inside, lerp, newRect, setRect } from '../render/renderer.ts';
+import { HORIZON_ABOVE_SEA, inside, lerp, newRect, setRect, type PoseView } from '../render/renderer.ts';
+import { GEAR_COLORS } from '../sprites/ramps.ts';
 import type { AthleteSprites } from '../sprites/sheet.ts';
 import type { Context, Screen } from './screen.ts';
 
@@ -16,6 +23,20 @@ import type { Context, Screen } from './screen.ts';
 const HINT_TIME = 4;
 /** Random rival looks prepared per sport; each run shows two of them. */
 const RIVAL_LOOKS = 4;
+/** Seconds the mission banner stays up. */
+const BANNER_TIME = 2.5;
+/** The ghost stays this long after its run ended, sinking. */
+const GHOST_LINGER = 1.5;
+
+/** Pose of the ghost, filled from its recording every frame. */
+class GhostPose implements PoseView {
+  state: AthleteState = 'ride';
+  y = 0;
+  prevY = 0;
+  rotation = 0;
+  prevRotation = 0;
+  stateTime = 1;
+}
 
 /**
  * The run itself: one Game per sport, the HUD, the pause menu and the
@@ -23,6 +44,20 @@ const RIVAL_LOOKS = 4;
  * single button.
  */
 export class PlayScreen implements Screen {
+  /** Today's daily challenge instead of a random run (set before entering). */
+  daily = false;
+  private dailyRecord: DailyRecord = { day: '', best: 0, ghost: '' };
+  private newDailyBest = false;
+  private readonly recording = new GhostTrack();
+  private readonly ghost = new GhostTrack();
+  private readonly ghostSample = newGhostSample();
+  private readonly ghostPose = new GhostPose();
+  private readonly result: RunResult;
+  private readonly completed: Mission[] = [];
+  /** Missions completed during this run, shown on the wipeout screen. */
+  private readonly runMissions: Mission[] = [];
+  private banner: Mission | null = null;
+  private bannerTime = 0;
   private readonly games = {} as Record<SportId, Game>;
   private readonly rivalPool = {} as Record<SportId, AthleteSprites[]>;
   private readonly rivals: AthleteSprites[] = [];
@@ -38,6 +73,7 @@ export class PlayScreen implements Screen {
 
   constructor(ctx: Context) {
     this.ctx = ctx;
+    this.result = { sport: 'surf', points: 0, daily: false, stats: { tricks: 0, bestCombo: 0, maxSpins: 0, closeCalls: 0, overs: 0, powerUps: 0, maxFlow: 0, dolphins: 0 } };
     for (const sport of SPORTS) {
       this.games[sport] = new Game(sport, ctx.profile.best[sport], {
         onGameOver: (_score, best) => {
@@ -56,8 +92,23 @@ export class PlayScreen implements Screen {
     this.game = this.games[sport];
     this.game.best = Math.max(this.game.best, this.ctx.profile.best[sport]);
     this.prepareRivals(sport);
+    this.result.sport = sport;
+    this.result.daily = this.daily;
+    this.result.stats = this.game.stats;
+    if (this.daily) {
+      // the same seed for everyone today; restarts replay it, and the ghost is today's best run
+      const day = dayKey(new Date());
+      const seed = dailySeed(day, sport);
+      this.dailyRecord = this.ctx.profile.daily(sport, day);
+      if (!this.ghost.decode(this.dailyRecord.ghost)) this.ghost.clear();
+      this.game.restartSeed = seed;
+      this.game.start(seed);
+    } else {
+      this.ghost.clear();
+      this.game.restartSeed = null;
+      this.game.start();
+    }
     this.newRun();
-    this.game.start();
     this.lastPhase = this.game.phase;
     this.pressed = false;
   }
@@ -79,6 +130,11 @@ export class PlayScreen implements Screen {
   }
 
   private newRun(): void {
+    this.recording.clear();
+    this.runMissions.length = 0;
+    this.banner = null;
+    this.bannerTime = 0;
+    this.newDailyBest = false;
     const pool = this.rivalPool[this.game.sport];
     this.rivals.length = 0;
     if (!pool) return;
@@ -128,7 +184,41 @@ export class PlayScreen implements Screen {
     g.update(dt, this.pressed, this.ctx.input.held);
     this.pressed = false;
     if (this.lastPhase === 'over' && g.phase === 'running') this.newRun();
+    if (g.phase === 'running' || (g.phase === 'over' && this.lastPhase === 'running')) {
+      this.record();
+      this.checkMissions();
+    }
+    if (this.lastPhase === 'running' && g.phase === 'over') this.runEnded();
     this.lastPhase = g.phase;
+    if (this.bannerTime > 0) this.bannerTime -= dt;
+  }
+
+  /** One ghost sample per 1/20 s of the run. */
+  private record(): void {
+    const g = this.game;
+    const a = g.athlete;
+    const state = a.state === 'crash' ? GHOST_CRASH : a.state === 'air' ? GHOST_AIR : GHOST_RIDE;
+    this.recording.record(g.time, g.distance, a.y, a.rotation, state);
+  }
+
+  private checkMissions(): void {
+    const g = this.game;
+    this.result.points = g.points;
+    if (this.ctx.missions.check(this.result, this.completed) === 0) return;
+    for (let i = 0; i < this.completed.length; i++) this.runMissions.push(this.completed[i]);
+    this.banner = this.completed[0];
+    this.bannerTime = BANNER_TIME;
+  }
+
+  /** A daily run that beats today's best becomes the new ghost. */
+  private runEnded(): void {
+    const g = this.game;
+    if (!this.daily || g.points <= this.dailyRecord.best) return;
+    this.newDailyBest = true;
+    this.dailyRecord.best = g.points;
+    this.dailyRecord.ghost = this.recording.encode();
+    this.ctx.profile.saveDaily(g.sport, this.dailyRecord);
+    this.ghost.copyFrom(this.recording);
   }
 
   render(alpha: number): void {
@@ -145,10 +235,35 @@ export class PlayScreen implements Screen {
     r.obstacles(g.obstacles.items, alpha, g.clock, this.rivals);
     const p = g.power;
     if (p.active) r.powerUp(p.kind, lerp(p.prevX, p.x, alpha), p.y, g.clock);
+    this.drawGhost(distance, alpha);
     const blink = g.grace > 0 && Math.floor(g.clock * 12) % 2 === 1;
     if (!blink) r.athlete(this.ctx.player(), sport, g.athlete, cfg.playerX, alpha, g.clock, 1, r.seaY, cfg.playerW);
     r.surfaceFront(distance);
     this.hud();
+  }
+
+  /** Today's best daily run, translucent, at its distance relative to yours. */
+  private drawGhost(distance: number, alpha: number): void {
+    const g = this.game;
+    if (!this.daily || this.ghost.count === 0 || g.phase === 'ready' || g.phase === 'over') return;
+    const { r } = this.ctx;
+    // where the best run ended
+    const end = this.ghost.distance[this.ghost.count - 1];
+    const flagX = g.cfg.playerX + g.cfg.playerW / 2 + (end - distance);
+    if (flagX > -40 && flagX < r.W + 4) r.bestFlag(flagX, t.ghost);
+    const time = g.time - STEP * (1 - alpha);
+    const s = this.ghostSample;
+    if (!this.ghost.sample(time, s)) return;
+    const after = time - this.ghost.duration;
+    if (after > GHOST_LINGER) return;
+    const x = g.cfg.playerX + Math.round(s.distance - distance);
+    if (x < -60 || x > r.W + 40) return;
+    const pose = this.ghostPose;
+    pose.state = after > 0 || s.state === GHOST_CRASH ? 'crash' : s.state === GHOST_AIR ? 'air' : 'ride';
+    pose.y = pose.prevY = s.y;
+    pose.rotation = pose.prevRotation = s.rotation;
+    pose.stateTime = after > 0 ? after : 1;
+    r.ghostAthlete(this.ctx.player(), g.sport, pose, x, g.clock, g.cfg.playerW);
   }
 
   private hud(): void {
@@ -159,12 +274,15 @@ export class PlayScreen implements Screen {
     const margin = 6;
     const lineH = (GLYPH_H + 4) * u;
     const points = g.points;
-    r.scoreLine(points, g.best, true);
+    r.scoreLine(points, this.daily ? this.dailyRecord.best : g.best, true);
 
     // pause button, top-left
     const size = (GLYPH_H + 7) * u;
     if (g.phase === 'running') r.pauseButton(setRect(this.pauseRect, margin, margin, size, size), u);
     else setRect(this.pauseRect, 0, 0, 0, 0);
+
+    // daily challenge tag under the pause button
+    if (this.daily) r.text(t.daily, margin, margin + size + 3 * u, C.sun, u);
 
     const row2 = margin + lineH;
     if (g.phase === 'running' && g.score.combo > 0) {
@@ -225,6 +343,7 @@ export class PlayScreen implements Screen {
 
     const horizon = seaY - HORIZON_ABOVE_SEA;
     const mid = Math.floor(horizon / 2);
+    if (this.bannerTime > 0 && this.banner && g.phase === 'running') this.missionBanner(y + (powerLabel ? 0 : lineH));
     switch (g.phase) {
       case 'running':
         if (g.time < HINT_TIME && !powerLabel) {
@@ -249,14 +368,40 @@ export class PlayScreen implements Screen {
         break;
       }
       case 'over': {
-        let oy = Math.max(row2 + lineH, mid - 36 * u);
-        oy += r.centered(t.wipeout, W / 2, oy, C.white, 2 * u);
+        const textH = (GLYPH_H + 3) * u;
+        const newBest = this.daily ? this.newDailyBest : g.newBest;
+        const missions = this.runMissions.length > 0;
+        // a smaller title when the screen is short
+        let title = 2 * u;
+        const blockH = () => (GLYPH_H + 3) * title + textH + u + (GLYPH_H + 4) * 2 * u + (newBest ? textH : 0) + (this.daily ? textH : 0) + (missions ? textH + 2 * u : 0) + 2 * u + (GLYPH_H + 7) * u;
+        if (blockH() > r.H - row2 - lineH - margin) title = u;
+        let oy = Math.max(row2 + lineH, Math.min(mid - 36 * u, r.H - margin - blockH()));
+        oy += r.centered(t.wipeout, W / 2, oy, C.white, title);
         const who = WHO[this.ctx.profile.rider][g.sport];
         oy += r.centered(who, W / 2, oy, C.skyPale, u) + u;
         const scoreDigits = digitCount(points);
         r.number(points, scoreDigits, Math.floor((W - r.font.widthOf(scoreDigits, 2 * u)) / 2), oy, C.sun, 2 * u);
         oy += (GLYPH_H + 4) * 2 * u;
-        if (g.newBest) oy += r.centered(t.newBest, W / 2, oy, C.gold, u);
+        if (newBest) oy += r.centered(t.newBest, W / 2, oy, C.gold, u);
+        if (this.daily) {
+          // "DAILY BEST 01234"
+          const digits = Math.max(5, digitCount(this.dailyRecord.best));
+          const lw = r.font.width(t.dailyBest, u) + (digits + 1) * adv;
+          const lx = Math.round((W - lw) / 2);
+          r.text(t.dailyBest, lx, oy, C.skyPale, u);
+          r.number(this.dailyRecord.best, digits, lx + lw - digits * adv, oy, C.skyPale, u);
+          oy += textH;
+        }
+        if (missions) {
+          // "MISSION COMPLETE!" and the colors it unlocked
+          const sw = 8 * u;
+          const n = this.runMissions.length;
+          const lw = r.font.width(t.missionComplete, u) + n * (sw + 2 * u) + 2 * u;
+          const lx = Math.round((W - lw) / 2);
+          r.text(t.missionComplete, lx, oy, C.gold, u);
+          for (let i = 0; i < n; i++) r.swatch(GEAR_COLORS[this.runMissions[i].reward], lx + lw - (n - i) * (sw + 2 * u) + 2 * u, oy, sw, GLYPH_H * u);
+          oy += textH + 2 * u;
+        }
         if (g.overTime >= g.cfg.restartDelay) {
           this.buttons(oy + 2 * u, t.again);
         } else {
@@ -268,6 +413,26 @@ export class PlayScreen implements Screen {
       case 'ready':
         break;
     }
+  }
+
+  /** "MISSION COMPLETE!" and the mission, on a panel, during the run. */
+  private missionBanner(y: number): void {
+    const { r } = this.ctx;
+    const m = this.banner;
+    if (!m) return;
+    const u = r.u;
+    const text = t.missionText[m.id];
+    const sw = 8 * u;
+    const w = Math.max(r.font.width(t.missionComplete, u), r.font.width(text, u) + sw + 4 * u) + 8 * u;
+    const h = 2 * (GLYPH_H + 3) * u + 4 * u;
+    const x = Math.round((r.W - w) / 2);
+    // blink at the start so it catches the eye
+    if (this.bannerTime > BANNER_TIME - 0.4 && Math.floor(this.bannerTime * 10) % 2 === 0) return;
+    r.panel(setRect(this.hintRect, x, y, w, h));
+    r.centered(t.missionComplete, r.W / 2, y + 2 * u, C.gold, u);
+    const tx = Math.round((r.W - (r.font.width(text, u) + sw + 4 * u)) / 2);
+    r.text(text, tx, y + 2 * u + (GLYPH_H + 3) * u, C.white, u);
+    r.swatch(GEAR_COLORS[m.reward], tx + r.font.width(text, u) + 4 * u, y + 2 * u + (GLYPH_H + 3) * u, sw, GLYPH_H * u);
   }
 
   /** [primary] [HOME] centered at y. */

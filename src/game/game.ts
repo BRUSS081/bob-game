@@ -115,6 +115,8 @@ export class Game {
   flow = 0;
   /** Seed of the current run (daily challenges replay the same one). */
   seed = 0;
+  /** When set, a restart replays this seed instead of a random one (daily challenge). */
+  restartSeed: number | null = null;
   readonly popups: Popup[] = [];
   readonly stats: RunStats = newStats();
   readonly dolphins = new Dolphins();
@@ -207,7 +209,7 @@ export class Game {
         this.overTime += dt;
         this.athlete.update(dt, false, false);
         this.settle();
-        if (pressed && this.overTime >= this.cfg.restartDelay) this.start();
+        if (pressed && this.overTime >= this.cfg.restartDelay) this.start(this.restartSeed ?? undefined);
         return;
       case 'running':
         this.clock += dt;

@@ -326,6 +326,9 @@ function coverage(c: AthleteConfig): Coverage {
       return { upperArm: 'suitA', foreArm: 'suitA', thigh: 'suitA', shin: 'suitA' };
     case 'shorty':
       return { upperArm: 'suitA', foreArm: 'skin', thigh: 'suitA', shin: 'skin' };
+    case 'swimsuit':
+    case 'bikini':
+      return { upperArm: 'skin', foreArm: 'skin', thigh: 'skin', shin: 'skin' };
     default:
       return { upperArm: 'suitA', foreArm: 'skin', thigh: 'suitB', shin: 'skin' };
   }
@@ -346,8 +349,21 @@ function blob(frame: Raster, p: P, w: number, h: number, slotName: SlotName, dx 
   composite(frame, part, true);
 }
 
+/**
+ * Torso outlines as (t, half width) pairs from the hip (t = 0) to the
+ * shoulders (t = 1), front side then back side. BOB: a wedge with broad
+ * shoulders. BOBBA: an hourglass, with a bust on the front.
+ */
+const TORSO_BOB: { front: readonly P[]; back: readonly P[] } = {
+  front: [[0, 3], [1, 4.2]],
+  back: [[1, 4.2], [0, 3]],
+};
+const TORSO_BOBBA: { front: readonly P[]; back: readonly P[] } = {
+  front: [[0, 3.4], [0.42, 1.8], [0.6, 2.6], [0.7, 3.7], [0.84, 2.7], [1, 2.9]],
+  back: [[1, 2.9], [0.55, 2], [0.38, 2], [0, 3.6]],
+};
+
 function torso(frame: Raster, p: Pose, c: AthleteConfig, sport: SportId): void {
-  const bob = c.character === 'bob';
   const [hx, hy] = p.hip;
   const [cx, cy] = p.chest;
   const dx = cx - hx;
@@ -355,19 +371,13 @@ function torso(frame: Raster, p: Pose, c: AthleteConfig, sport: SportId): void {
   const len = Math.hypot(dx, dy) || 1;
   const nx = -dy / len;
   const ny = dx / len;
-  const hw = bob ? 3 : 2.6;
-  const cw = bob ? 4.2 : 3.2;
+  const shape = c.character === 'bob' ? TORSO_BOB : TORSO_BOBBA;
+  const outlinePts: [number, number][] = [];
+  for (const [t, w] of shape.front) outlinePts.push(at([hx + dx * t + nx * w, hy + dy * t + ny * w]));
+  for (const [t, w] of shape.back) outlinePts.push(at([hx + dx * t - nx * w, hy + dy * t - ny * w]));
   const part = newPart();
-  part.polygon(
-    [
-      at([hx + nx * hw, hy + ny * hw]),
-      at([hx - nx * hw, hy - ny * hw]),
-      at([cx - nx * cw, cy - ny * cw]),
-      at([cx + nx * cw, cy + ny * cw]),
-    ],
-    S('suitA', MID),
-  );
   const style = SUIT_STYLES[c.suitStyle];
+  part.polygon(outlinePts, style === 'bikini' ? S('skin', MID) : S('suitA', MID));
   const harness = sport !== 'surf';
   const [ax, ay] = at(p.hip);
   for (let y = 0; y < FRAME_H; y++) {
@@ -380,12 +390,19 @@ function torso(frame: Raster, p: Pose, c: AthleteConfig, sport: SportId): void {
       if (style === 'rashguard' && t < 0.12) part.set(x, y, S('suitB', MID));
       if (style === 'full' && s > 1.2) part.set(x, y, S('suitB', MID));
       if (style === 'shorty' && t > 0.55 && t < 0.72) part.set(x, y, S('suitB', MID));
+      // one-piece: bare shoulders, a contrast band at the waist
+      if (style === 'swimsuit' && t > 0.9) part.set(x, y, S('skin', MID));
+      if (style === 'swimsuit' && t > 0.36 && t < 0.48) part.set(x, y, S('suitB', MID));
+      // bikini: bottom and top, bare midriff
+      if (style === 'bikini' && t < 0.24) part.set(x, y, S('suitB', MID));
+      if (style === 'bikini' && t > 0.58 && t < 0.84) part.set(x, y, S('suitA', MID));
       if (harness && t > 0.08 && t < 0.3) part.set(x, y, S('harness', MID));
     }
   }
   shade(part, SLOT.suitA);
   shade(part, SLOT.suitB);
   shade(part, SLOT.harness);
+  shade(part, SLOT.skin);
   composite(frame, part, false);
   if (harness) {
     // spreader bar hook at the front of the harness
@@ -397,7 +414,7 @@ function torso(frame: Raster, p: Pose, c: AthleteConfig, sport: SportId): void {
 function head(frame: Raster, p: Pose, c: AthleteConfig): void {
   const part = newPart();
   const [x, y] = at(p.head);
-  blitRows(part, HEADS[c.character], x, y, { S: S('skin', MID), z: S('skin', SHADE), k: C.ink });
+  blitRows(part, HEADS[c.character], x, y, { S: S('skin', MID), z: S('skin', SHADE), k: C.ink, l: C.rose });
   shade(part, SLOT.skin);
   composite(frame, part, false);
 
@@ -467,8 +484,10 @@ export function composeFrame(c: AthleteConfig, sport: SportId, frame: FrameName)
   const f = new Raster(FRAME_W, FRAME_H);
 
   drawBoard(f, sport, c);
+  // BOBBA has slimmer arms
+  const arm = c.character === 'bob' ? 3 : 2;
   // back arm, back leg
-  limb(f, p.chest, p.elbowB, 3, cov.upperArm);
+  limb(f, p.chest, p.elbowB, arm, cov.upperArm);
   limb(f, p.elbowB, p.handB, 2, cov.foreArm);
   blob(f, p.handB, 2, 2, 'skin', -1, -1);
   limb(f, p.hip, p.kneeB, 4, cov.thigh);
@@ -499,7 +518,7 @@ export function composeFrame(c: AthleteConfig, sport: SportId, frame: FrameName)
     f.set(bx, by, C.ink);
     f.set(bx, by + 7, C.ink);
   }
-  limb(f, p.chest, p.elbowF, 3, cov.upperArm);
+  limb(f, p.chest, p.elbowF, arm, cov.upperArm);
   limb(f, p.elbowF, p.handF, 2, cov.foreArm);
   blob(f, p.handF, 2, 2, 'skin', -1, -1);
 

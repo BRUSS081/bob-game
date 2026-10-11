@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { Rng } from '../src/core/rng.ts';
-import { defaultConfig, randomize } from '../src/custom/athlete.ts';
+import { HAIR_STYLES, defaultConfig, randomize } from '../src/custom/athlete.ts';
 import { SPORTS } from '../src/game/sport.ts';
 import { C } from '../src/render/palette.ts';
-import { ANCHOR_X, ANCHOR_Y, FRAME_H, FRAME_NAMES, FRAME_W, composeFrame, composeKite, rotateFrame } from '../src/sprites/compose.ts';
+import { ANCHOR_X, ANCHOR_Y, FRAME_H, FRAME_NAMES, FRAME_W, composeFrame, composeKite, poseFor, rotateFrame } from '../src/sprites/compose.ts';
 import { HAIR, HEADS, HEAD_H, HEAD_W } from '../src/sprites/parts.ts';
 import { buildLut, SLOT } from '../src/sprites/ramps.ts';
 import { resolveRamps } from '../src/custom/athlete.ts';
@@ -94,5 +94,38 @@ describe('composed athletes', () => {
     const k = composeKite(defaultConfig('bob', 'kite'), 0);
     expect(k.tipL[0]).toBeLessThan(k.tipR[0]);
     expect(k.raster.get(k.tipL[0], k.tipL[1] - 1) || k.raster.get(k.tipL[0] + 1, k.tipL[1] - 1)).toBeTruthy();
+  });
+});
+
+describe('BOBBA reads as BOBBA', () => {
+  it("no hair style covers BOBBA's eye", () => {
+    for (let style = 0; style < HAIR_STYLES.length; style++) {
+      if (HAIR_STYLES[style] === 'short') continue; // BOB's quiff: a fringe over the brow
+      for (const sport of SPORTS) {
+        const c = defaultConfig('bobba', sport);
+        c.hairStyle = style;
+        const f = composeFrame(c, sport, 'ride0');
+        const p = poseFor(sport, 'ride0');
+        // the eye in HEADS.bobba is at (7, 2) and (7, 3)
+        const x = ANCHOR_X + p.head[0] + 7;
+        const y = ANCHOR_Y + p.head[1] + 2;
+        expect(f.get(x, y), `${HAIR_STYLES[style]} in ${sport}`).toBe(C.ink);
+      }
+    }
+  });
+
+  it('BOBBA has a different body from BOB, not only another head', () => {
+    for (const sport of SPORTS) {
+      const bob = defaultConfig('bob', sport);
+      const bobba = defaultConfig('bobba', sport);
+      // same everything but the character: the frames still differ below the head
+      Object.assign(bobba, { ...bob, character: 'bobba' });
+      const a = composeFrame(bob, sport, 'ride0');
+      const b = composeFrame(bobba, sport, 'ride0');
+      const neck = ANCHOR_Y + poseFor(sport, 'ride0').head[1] + 12;
+      let diff = 0;
+      for (let y = neck; y < a.h; y++) for (let x = 0; x < a.w; x++) if (a.get(x, y) !== b.get(x, y)) diff++;
+      expect(diff, sport).toBeGreaterThan(10);
+    }
   });
 });

@@ -15,7 +15,9 @@ export type CharacterId = 'bob' | 'bobba';
 export const CHARACTERS: readonly CharacterId[] = ['bob', 'bobba'];
 
 export const HAIR_STYLES = ['short', 'mohawk', 'ponytail', 'long', 'bun', 'curly'] as const;
-export const SUIT_STYLES = ['full', 'shorty', 'rashguard'] as const;
+export const SUIT_STYLES = ['full', 'shorty', 'rashguard', 'swimsuit', 'bikini'] as const;
+/** Suit styles a random BOB look picks from (anyone can choose any style by hand). */
+const BOB_RANDOM_SUITS = [0, 1, 2];
 export const BOARD_ART = ['none', 'stripe', 'split', 'rails', 'dots'] as const;
 export const GEAR_PATTERNS = ['solid', 'split', 'stripes', 'tips'] as const;
 
@@ -104,7 +106,8 @@ export function defaultConfig(character: CharacterId, sport: SportId): AthleteCo
     skin: bob ? 2 : 5,
     hairStyle: bob ? 0 : 2,
     hairColor: bob ? 1 : 0,
-    suitStyle: 2,
+    // BOB: rash guard and board shorts; BOBBA: a sporty one-piece swimsuit
+    suitStyle: bob ? 2 : 3,
     suitA: bob ? G.coral : G.violet,
     suitB: bob ? G.navy : G.gold,
     helmet: -1,
@@ -159,6 +162,7 @@ export function randomize(c: AthleteConfig, sport: SportId, rng: Rng, unlocked: 
     if (spec.none && v === -1 && rng.next() < 0.5) v = Math.floor(rng.next() * spec.count);
     // a locked color falls back to an open one
     if (!available(spec, v, unlocked)) v = v % BASE_GEAR_COUNT;
+    if (spec.key === 'suitStyle' && c.character === 'bob') v = BOB_RANDOM_SUITS[Math.floor(rng.next() * BOB_RANDOM_SUITS.length)];
     c[spec.key] = v;
   }
   // keep suit colors distinct so the two-tone suit reads

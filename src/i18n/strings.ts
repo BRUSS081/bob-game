@@ -84,7 +84,7 @@ export const STRINGS = {
     },
     styles: {
       hairStyle: { short: 'SHORT', mohawk: 'MOHAWK', ponytail: 'PONYTAIL', long: 'LONG', bun: 'BUN', curly: 'CURLY' },
-      suitStyle: { full: 'FULL SUIT', shorty: 'SHORTY', rashguard: 'RASH TOP' },
+      suitStyle: { full: 'FULL SUIT', shorty: 'SHORTY', rashguard: 'RASH TOP', swimsuit: 'SWIMSUIT', bikini: 'BIKINI' },
       boardArt: { none: 'PLAIN', stripe: 'STRIPE', split: 'SPLIT', rails: 'RAILS', dots: 'DOTS' },
       gearPattern: { solid: 'SOLID', split: 'SPLIT', stripes: 'STRIPES', tips: 'TIPS' },
     },

@@ -108,7 +108,14 @@ export const STRINGS = {
         dark: 'NIGHT FALLS',
       },
       fishing: {
-        // fishing
+        bite: 'FISH ON!',
+        snap: 'SNAP!',
+        escape: 'IT GOT AWAY',
+        sting: 'JELLYFISH!',
+        catches: 'CATCHES',
+        power: 'POWER',
+        tension: 'TENSION',
+        sinkHint: 'HOLD TO SINK, LET GO TO RISE',
       },
       freedive: {
         // freedive
